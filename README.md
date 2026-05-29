@@ -27,13 +27,20 @@ export PYCODE_API_KEY=sk-...
 ## 使用
 
 ```bash
-pycode                                   # 交互式 REPL(/exit 退出)
+pycode                                   # 交互式 REPL(/exit 退出,/undo 撤销上次修改)
 pycode -p "解释这个项目的结构"            # 非交互单次执行
 cat error.log | pycode -p "分析这个报错"  # 管道输入
 pycode -p "写 commit message" --no-tools  # 禁用工具调用
+pycode -p "审查当前 diff" --json          # 结构化 JSON 输出
+pycode -p "重构这个模块" --dry-run         # 高风险操作只预览不执行
+pycode -p "..." --max-turns 3 --quiet     # 限制循环轮数 / 精简输出
 pycode config list                       # 查看当前配置
+pycode config get security.mode          # 查看单项配置及来源
+pycode config set security.mode workspace # 写入项目配置
 pycode --version
 ```
+
+非交互退出码:`0` 成功 / `1` 错误 / `2` 工具被拒绝且无法继续。
 
 ## 安全模型
 
@@ -47,7 +54,8 @@ pycode --version
 | `dangerous` | 显式授权,全放行 |
 
 - 敏感文件(`.env`、密钥、证书、token)默认拒读拒写。
-- 危险 Shell 命令(`rm -rf /`、`sudo`、fork 炸弹等)由黑名单强制拦截。
+- 危险 Shell 命令(`rm -rf /`、`sudo`、fork 炸弹等)由黑名单强制拦截;`git push` 默认禁用(`security.allow_git_push` 开启)。
+- 文件路径限定在项目根目录内,拒绝穿越(`../`)与越界绝对路径。
 - 文件修改经 PatchManager:展示 diff → 确认 → 应用,可回滚最近一次变更。
 - 所有工具调用(含被拒绝的)写入 `.pycode/audit.jsonl`。
 
@@ -78,4 +86,4 @@ CLI / REPL  →  Agent Loop  →  { LLMProvider, ToolRegistry, ContextScanner }
 
 ## 已知限制(垂直切片范围)
 
-切片聚焦核心主链路。以下留待后续:限流指数退避重试、上下文压缩、unified-diff 补丁解析(当前用整文件替换)、流式输出、完整 TUI、MCP/LSP。
+切片聚焦核心主链路。以下留待后续:上下文压缩、unified-diff 补丁解析(当前用整文件替换)、流式输出、完整 TUI、MCP/LSP。
