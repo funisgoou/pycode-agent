@@ -1,0 +1,45 @@
+from __future__ import annotations
+from pathlib import Path
+from pycode_agent.config.settings import Settings
+from pycode_agent.core.agent import Agent
+from pycode_agent.model.base import LLMProvider
+from pycode_agent.tools.base import ToolContext
+from pycode_agent.tools.registry import ToolRegistry
+from pycode_agent.tools.file_tools import ReadFile, ListDir, SearchText, WriteFile, EditFile
+from pycode_agent.tools.shell_tools import RunShell
+from pycode_agent.tools.git_tools import GitStatus, GitDiff
+from pycode_agent.tools.memory_tools import MemoryRead, MemoryWrite
+from pycode_agent.security.policy import Policy
+from pycode_agent.security.approval import Approval
+from pycode_agent.logs.audit import AuditLog
+from pycode_agent.utils.diff import PatchManager
+from pycode_agent.context.scanner import scan_project
+
+
+def _build_registry(settings: Settings) -> ToolRegistry:
+    reg = ToolRegistry()
+    for tool in (ReadFile(), ListDir(), SearchText(), WriteFile(), EditFile(),
+                 GitStatus(), GitDiff(), MemoryRead(), MemoryWrite()):
+        reg.register(tool)
+    if settings.security.allow_shell:
+        reg.register(RunShell())
+    return reg
+
+
+def build_agent_with_provider(*, provider: LLMProvider, project_dir: Path,
+                              settings: Settings, auto_yes: bool = False) -> Agent:
+    project_dir = Path(project_dir)
+    pm = PatchManager()
+    ctx = ToolContext(project_dir=project_dir, settings=settings, patch_manager=pm)
+    profile = scan_project(project_dir)
+    return Agent(
+        provider=provider,
+        registry=_build_registry(settings),
+        policy=Policy(mode=settings.security.mode),
+        approval=Approval(auto_yes=auto_yes),
+        audit=AuditLog(project_dir / ".pycode" / "audit.jsonl"),
+        ctx=ctx,
+        max_turns=settings.agent.max_turns,
+        max_tool_calls=settings.agent.max_tool_calls,
+        system_prefix="Project profile:\n" + profile.summary(),
+    )
