@@ -17,5 +17,8 @@ class Approval:
         self._out(f"\n[确认] {title}")
         if detail:
             self._out(detail)
-        ans = self._prompt("应用? [y/N] ").strip().lower()
+        try:
+            ans = self._prompt("应用? [y/N] ").strip().lower()
+        except (EOFError, OSError):
+            return False
         return ans in ("y", "yes")
