@@ -111,3 +111,36 @@ def test_network_error_retried_then_raises():
     except NetworkError:
         pass
     assert calls["n"] == 3
+
+
+def _capture_url_provider(base_url):
+    seen = {}
+    def handler(req):
+        seen["url"] = str(req.url)
+        return httpx.Response(200, json={
+            "choices": [{"message": {"role": "assistant", "content": "ok"}}]
+        })
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport, base_url=base_url)
+    p = OpenAICompatibleProvider(model="m", api_key="k", client=client,
+                                 sleep_fn=lambda s: None)
+    return p, seen
+
+
+def test_base_url_without_path_appends_endpoint():
+    p, seen = _capture_url_provider("https://api.test/v1")
+    p.chat(messages=[Message(role="user", content="hi")], tools=[])
+    assert seen["url"] == "https://api.test/v1/chat/completions"
+
+
+def test_base_url_with_full_endpoint_not_duplicated():
+    # user configured the full endpoint including /chat/completions
+    p, seen = _capture_url_provider("https://api.test/v1/chat/completions")
+    p.chat(messages=[Message(role="user", content="hi")], tools=[])
+    assert seen["url"] == "https://api.test/v1/chat/completions"
+
+
+def test_base_url_with_trailing_slash():
+    p, seen = _capture_url_provider("https://api.test/v1/")
+    p.chat(messages=[Message(role="user", content="hi")], tools=[])
+    assert seen["url"] == "https://api.test/v1/chat/completions"

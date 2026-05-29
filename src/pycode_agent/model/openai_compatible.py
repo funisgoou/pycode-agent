@@ -39,6 +39,21 @@ class OpenAICompatibleProvider(LLMProvider):
         self.max_retries = max_retries
         self.backoff_base = backoff_base
         self._sleep = sleep_fn
+        self._endpoint = self._resolve_endpoint()
+
+    def _resolve_endpoint(self) -> str:
+        """Build the absolute chat-completions URL.
+
+        Accepts a base_url that either already ends in /chat/completions
+        or points at the API root (e.g. .../v1). Avoids httpx relative-join
+        surprises by always posting an absolute URL.
+        """
+        base = str(self._client.base_url).rstrip("/")
+        if not base:
+            return "/chat/completions"
+        if base.endswith("/chat/completions"):
+            return base
+        return base + "/chat/completions"
 
     def chat(self, *, messages: list[Message], tools: list[dict]) -> LLMResponse:
         attempt = 0
@@ -61,7 +76,7 @@ class OpenAICompatibleProvider(LLMProvider):
             payload["tools"] = tools
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         try:
-            resp = self._client.post("/chat/completions", json=payload, headers=headers)
+            resp = self._client.post(self._endpoint, json=payload, headers=headers)
         except httpx.TimeoutException as e:
             raise TimeoutError(str(e)) from e
         except httpx.HTTPError as e:
