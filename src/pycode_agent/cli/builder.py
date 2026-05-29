@@ -27,7 +27,8 @@ def _build_registry(settings: Settings) -> ToolRegistry:
 
 
 def build_agent_with_provider(*, provider: LLMProvider, project_dir: Path,
-                              settings: Settings, auto_yes: bool = False) -> Agent:
+                              settings: Settings, auto_yes: bool = False,
+                              dry_run: bool = False, max_turns: int | None = None) -> Agent:
     project_dir = Path(project_dir)
     pm = PatchManager()
     ctx = ToolContext(project_dir=project_dir, settings=settings, patch_manager=pm)
@@ -39,7 +40,8 @@ def build_agent_with_provider(*, provider: LLMProvider, project_dir: Path,
         approval=Approval(auto_yes=auto_yes),
         audit=AuditLog(project_dir / ".pycode" / "audit.jsonl"),
         ctx=ctx,
-        max_turns=settings.agent.max_turns,
+        max_turns=max_turns if max_turns is not None else settings.agent.max_turns,
         max_tool_calls=settings.agent.max_tool_calls,
         system_prefix="Project profile:\n" + profile.summary(),
+        dry_run=dry_run,
     )

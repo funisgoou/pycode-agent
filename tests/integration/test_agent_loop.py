@@ -30,7 +30,7 @@ class DangerTool(Tool):
         return ToolResult(ok=True, content="did danger")
 
 
-def _agent(tmp_path, script, *, tools, mode="confirm", auto_yes=True):
+def _agent(tmp_path, script, *, tools, mode="confirm", auto_yes=True, dry_run=False):
     reg = ToolRegistry()
     for t in tools:
         reg.register(t)
@@ -43,6 +43,7 @@ def _agent(tmp_path, script, *, tools, mode="confirm", auto_yes=True):
         audit=AuditLog(tmp_path / "audit.jsonl"),
         ctx=ctx,
         max_turns=8,
+        dry_run=dry_run,
     )
 
 def test_loop_runs_low_risk_tool_then_answers(tmp_path):
@@ -134,3 +135,48 @@ def test_confirm_shows_diff_for_write(tmp_path):
     # the diff (showing -old line / +new line) should have been shown to the user
     assert "new line" in seen["text"]
     assert "old line" in seen["text"]
+
+
+def test_dry_run_skips_high_risk_execution(tmp_path):
+    danger = DangerTool()
+    script = [
+        LLMResponse(tool_calls=[ToolCall(id="c1", name="danger", arguments={})]),
+        LLMResponse(text="explained"),
+    ]
+    agent = _agent(tmp_path, script, tools=[danger], dry_run=True)
+    result = agent.run("do danger")
+    assert danger.ran is False  # never executed in dry-run
+    assert result == "explained"
+
+
+def test_dry_run_allows_low_risk(tmp_path):
+    script = [
+        LLMResponse(tool_calls=[ToolCall(id="c1", name="echo", arguments={"text": "hi"})]),
+        LLMResponse(text="done"),
+    ]
+    agent = _agent(tmp_path, script, tools=[EchoTool()], dry_run=True)
+    agent.run("go")
+    # low-risk tools still run in dry-run; assistant got the echoed result
+    tool_msgs = [m for m in agent.messages if m.role == "tool"]
+    assert any("HI" in (m.content or "") for m in tool_msgs)
+
+
+def test_rejections_counted(tmp_path):
+    danger = DangerTool()
+    script = [
+        LLMResponse(tool_calls=[ToolCall(id="c1", name="danger", arguments={})]),
+        LLMResponse(text="ok skipped"),
+    ]
+    agent = _agent(tmp_path, script, tools=[danger], auto_yes=False)
+    agent.run("do danger")
+    assert agent.rejections == 1
+
+
+def test_no_rejections_when_allowed(tmp_path):
+    script = [
+        LLMResponse(tool_calls=[ToolCall(id="c1", name="echo", arguments={"text": "hi"})]),
+        LLMResponse(text="done"),
+    ]
+    agent = _agent(tmp_path, script, tools=[EchoTool()])
+    agent.run("go")
+    assert agent.rejections == 0

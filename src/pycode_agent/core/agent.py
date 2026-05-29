@@ -18,7 +18,7 @@ class Agent:
     def __init__(self, *, provider: LLMProvider, registry: ToolRegistry,
                  policy: Policy, approval: Approval, audit: AuditLog,
                  ctx: ToolContext, max_turns: int = 12, max_tool_calls: int = 40,
-                 system_prefix: str = ""):
+                 system_prefix: str = "", dry_run: bool = False):
         self.provider = provider
         self.registry = registry
         self.policy = policy
@@ -28,6 +28,8 @@ class Agent:
         self.max_turns = max_turns
         self.max_tool_calls = max_tool_calls
         self.system_prefix = system_prefix
+        self.dry_run = dry_run
+        self.rejections = 0
         self.messages: list[Message] = [
             Message(role="system", content=SYSTEM_PROMPT + ("\n\n" + system_prefix if system_prefix else ""))
         ]
@@ -66,6 +68,7 @@ class Agent:
             res = ToolResult(ok=False, error="denied by permission policy")
         elif decision == Decision.CONFIRM:
             detail = str(call.arguments)
+            preview = ""
             try:
                 parsed = tool.args_model.model_validate(call.arguments)
                 preview = tool.preview(parsed, self.ctx)
@@ -73,12 +76,17 @@ class Agent:
                     detail = preview
             except Exception:
                 pass
-            approved = self.approval.ask(f"运行工具 {call.name}", detail)
-            if not approved:
+            if self.dry_run:
                 from pycode_agent.core.messages import ToolResult
-                res = ToolResult(ok=False, error="user rejected")
+                res = ToolResult(ok=True, content=f"[dry-run] would run {call.name}; not executed.\n{preview}".rstrip())
             else:
-                res = self.registry.dispatch(call.name, call.arguments, self.ctx)
+                approved = self.approval.ask(f"运行工具 {call.name}", detail)
+                if not approved:
+                    from pycode_agent.core.messages import ToolResult
+                    self.rejections += 1
+                    res = ToolResult(ok=False, error="user rejected")
+                else:
+                    res = self.registry.dispatch(call.name, call.arguments, self.ctx)
         else:
             res = self.registry.dispatch(call.name, call.arguments, self.ctx)
         self.audit.record(event="tool_call", tool=call.name, arguments=call.arguments,

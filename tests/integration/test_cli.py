@@ -67,3 +67,59 @@ def test_prompt_error_exit_code_1(tmp_path, monkeypatch):
                         lambda settings: BoomProvider(script=[]))
     result = runner.invoke(app, ["-p", "hi", "--project-dir", str(tmp_path)])
     assert result.exit_code == 1
+
+
+def test_prompt_rejection_exit_code_2(tmp_path, monkeypatch):
+    from pycode_agent.core.messages import ToolCall
+    # model asks for a high-risk write, then gives up; user (auto) rejects -> exit 2
+    monkeypatch.setattr(cli_main, "_make_provider",
+                        lambda settings: FakeLLMProvider(script=[
+                            LLMResponse(tool_calls=[ToolCall(id="c1", name="write_file",
+                                        arguments={"path": "a.txt", "content": "x\n"})]),
+                            LLMResponse(text="cannot proceed without approval"),
+                        ]))
+    # default confirm mode + no --auto-approve; piped stdin makes Approval deny
+    result = runner.invoke(app, ["-p", "write a file", "--project-dir", str(tmp_path)],
+                           input="")
+    assert result.exit_code == 2
+
+
+def test_prompt_json_output(tmp_path, monkeypatch):
+    monkeypatch.setattr(cli_main, "_make_provider",
+                        lambda settings: FakeLLMProvider(script=[LLMResponse(text="hi json")]))
+    result = runner.invoke(app, ["-p", "hello", "--json", "--project-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    import json as _json
+    payload = _json.loads(result.stdout)
+    assert payload["result"] == "hi json"
+    assert payload["ok"] is True
+
+
+def test_prompt_max_turns_override(tmp_path, monkeypatch):
+    captured = {}
+    real_build = cli_main.build_agent_with_provider
+    def spy_build(**kwargs):
+        agent = real_build(**kwargs)
+        captured["agent"] = agent
+        return agent
+    monkeypatch.setattr(cli_main, "_make_provider",
+                        lambda settings: FakeLLMProvider(script=[LLMResponse(text="ok")]))
+    monkeypatch.setattr(cli_main, "build_agent_with_provider", spy_build)
+    result = runner.invoke(app, ["-p", "hi", "--max-turns", "3", "--project-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert captured["agent"].max_turns == 3
+
+
+def test_prompt_dry_run_sets_flag(tmp_path, monkeypatch):
+    captured = {}
+    real_build = cli_main.build_agent_with_provider
+    def spy_build(**kwargs):
+        agent = real_build(**kwargs)
+        captured["agent"] = agent
+        return agent
+    monkeypatch.setattr(cli_main, "_make_provider",
+                        lambda settings: FakeLLMProvider(script=[LLMResponse(text="ok")]))
+    monkeypatch.setattr(cli_main, "build_agent_with_provider", spy_build)
+    result = runner.invoke(app, ["-p", "hi", "--dry-run", "--project-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert captured["agent"].dry_run is True

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import sys
 from pathlib import Path
 import typer
@@ -29,6 +30,10 @@ def main(
     project_dir: Path = typer.Option(Path("."), "--project-dir", help="项目目录"),
     no_tools: bool = typer.Option(False, "--no-tools", help="禁用工具调用"),
     auto_approve: bool = typer.Option(False, "--auto-approve", help="自动确认(危险)"),
+    json_out: bool = typer.Option(False, "--json", help="以 JSON 输出结果(非交互)"),
+    quiet: bool = typer.Option(False, "--quiet", help="仅输出最终结果,抑制额外信息"),
+    max_turns: int = typer.Option(None, "--max-turns", help="覆盖最大循环轮数"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="高风险操作只预览不执行"),
 ):
     if version:
         typer.echo(__version__)
@@ -43,17 +48,27 @@ def main(
         provider = _make_provider(settings)
         agent = build_agent_with_provider(
             provider=provider, project_dir=project_dir, settings=settings,
-            auto_yes=auto_approve,
+            auto_yes=auto_approve, dry_run=dry_run, max_turns=max_turns,
         )
         if no_tools:
             agent.registry = type(agent.registry)()  # empty registry
         try:
             out = agent.run(full)
         except Exception as e:  # noqa
-            typer.echo(f"error: {e}", err=True)
+            if json_out:
+                typer.echo(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
+            else:
+                typer.echo(f"error: {e}", err=True)
             raise typer.Exit(code=1)
-        typer.echo(out)
-        raise typer.Exit(code=0)
+        if json_out:
+            typer.echo(json.dumps(
+                {"ok": True, "result": out, "rejections": agent.rejections},
+                ensure_ascii=False,
+            ))
+        else:
+            typer.echo(out)
+        # exit code 2: a tool was rejected and the run could not proceed normally
+        raise typer.Exit(code=2 if agent.rejections > 0 else 0)
 
     # no prompt, no subcommand -> interactive REPL
     from pycode_agent.cli.repl import run_repl
