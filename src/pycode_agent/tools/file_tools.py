@@ -9,8 +9,16 @@ from .base import Tool, Risk, ToolContext
 MAX_READ_BYTES = 200_000
 
 
+class PathOutsideProjectError(Exception):
+    ...
+
+
 def _resolve(ctx: ToolContext, rel: str) -> Path:
-    return (ctx.project_dir / rel).resolve()
+    base = Path(ctx.project_dir).resolve()
+    target = (base / rel).resolve()
+    if target != base and base not in target.parents:
+        raise PathOutsideProjectError(f"path escapes project root: {rel}")
+    return target
 
 
 class ReadArgs(BaseModel):
@@ -106,6 +114,13 @@ class WriteFile(Tool):
         pm.apply(p, args.content)
         return ToolResult(ok=True, content=f"wrote {args.path}")
 
+    def preview(self, args: WriteArgs, ctx: ToolContext) -> str:
+        from pycode_agent.utils.diff import PatchManager
+        try:
+            return (ctx.patch_manager or PatchManager()).preview(_resolve(ctx, args.path), args.content)
+        except Exception:
+            return ""
+
 
 class EditArgs(BaseModel):
     path: str
@@ -130,3 +145,10 @@ class EditFile(Tool):
         except ConflictError as e:
             return ToolResult(ok=False, error=str(e))
         return ToolResult(ok=True, content=f"edited {args.path}")
+
+    def preview(self, args: EditArgs, ctx: ToolContext) -> str:
+        from pycode_agent.utils.diff import PatchManager
+        try:
+            return (ctx.patch_manager or PatchManager()).preview(_resolve(ctx, args.path), args.content)
+        except Exception:
+            return ""

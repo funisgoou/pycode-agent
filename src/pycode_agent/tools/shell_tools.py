@@ -23,6 +23,13 @@ def is_blacklisted(command: str) -> bool:
     return any(rx.search(command) for rx in _BL)
 
 
+_GIT_PUSH = re.compile(r"\bgit\s+push\b")
+
+
+def is_git_push(command: str) -> bool:
+    return bool(_GIT_PUSH.search(command))
+
+
 class ShellArgs(BaseModel):
     command: str
     timeout: int = Field(default=60, le=600)
@@ -37,6 +44,10 @@ class RunShell(Tool):
     def run(self, args: ShellArgs, ctx: ToolContext) -> ToolResult:
         if is_blacklisted(args.command):
             return ToolResult(ok=False, error="refused: command matches blacklist")
+        if is_git_push(args.command):
+            allowed = bool(getattr(getattr(ctx.settings, "security", None), "allow_git_push", False))
+            if not allowed:
+                return ToolResult(ok=False, error="refused: git push disabled (set security.allow_git_push)")
         try:
             proc = subprocess.run(
                 args.command, shell=True, cwd=str(ctx.project_dir),

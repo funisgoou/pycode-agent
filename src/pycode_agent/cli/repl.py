@@ -20,6 +20,13 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
             return
         if user in ("/exit", "/quit"):
             return
+        if user == "/undo":
+            pm = agent.ctx.patch_manager
+            if pm is not None and pm.rollback_last():
+                console.print("[green]已撤销最近一次文件修改[/]")
+            else:
+                console.print("[yellow]没有可撤销的修改[/]")
+            continue
         if not user:
             continue
         try:

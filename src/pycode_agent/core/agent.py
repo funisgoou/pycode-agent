@@ -65,7 +65,15 @@ class Agent:
             from pycode_agent.core.messages import ToolResult
             res = ToolResult(ok=False, error="denied by permission policy")
         elif decision == Decision.CONFIRM:
-            approved = self.approval.ask(f"运行工具 {call.name}", str(call.arguments))
+            detail = str(call.arguments)
+            try:
+                parsed = tool.args_model.model_validate(call.arguments)
+                preview = tool.preview(parsed, self.ctx)
+                if preview:
+                    detail = preview
+            except Exception:
+                pass
+            approved = self.approval.ask(f"运行工具 {call.name}", detail)
             if not approved:
                 from pycode_agent.core.messages import ToolResult
                 res = ToolResult(ok=False, error="user rejected")

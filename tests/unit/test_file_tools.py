@@ -34,3 +34,19 @@ def test_write_file_creates(tmp_path):
     res = WriteFile().run(WriteFile.args_model(path="new.txt", content="hi\n"), _ctx(tmp_path))
     assert res.ok
     assert (tmp_path / "new.txt").read_text(encoding="utf-8") == "hi\n"
+
+def test_read_path_traversal_blocked_via_dispatch(tmp_path):
+    from pycode_agent.tools.registry import ToolRegistry
+    from pycode_agent.tools.file_tools import ReadFile
+    reg = ToolRegistry(); reg.register(ReadFile())
+    res = reg.dispatch("read_file", {"path": "../../etc/passwd"}, _ctx(tmp_path))
+    assert not res.ok and "escape" in res.error.lower()
+
+def test_absolute_path_blocked_via_dispatch(tmp_path):
+    from pycode_agent.tools.registry import ToolRegistry
+    from pycode_agent.tools.file_tools import ReadFile
+    reg = ToolRegistry(); reg.register(ReadFile())
+    # an absolute path outside project
+    outside = "/etc/hosts" if not str(tmp_path).startswith("C:") else "C:/Windows/win.ini"
+    res = reg.dispatch("read_file", {"path": outside}, _ctx(tmp_path))
+    assert not res.ok

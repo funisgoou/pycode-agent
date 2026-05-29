@@ -39,3 +39,7 @@ class Tool(ABC):
                 "parameters": self.args_model.model_json_schema(),
             },
         }
+
+    def preview(self, args: BaseModel, ctx: ToolContext) -> str:
+        """Human-readable preview shown at confirmation time. Default: none."""
+        return ""

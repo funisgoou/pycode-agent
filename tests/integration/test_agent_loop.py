@@ -99,3 +99,38 @@ def test_audit_written(tmp_path):
     agent = _agent(tmp_path, script, tools=[EchoTool()])
     agent.run("go")
     assert (tmp_path / "audit.jsonl").read_text(encoding="utf-8").strip()
+
+
+def test_confirm_shows_diff_for_write(tmp_path):
+    from pycode_agent.tools.file_tools import WriteFile
+    from pycode_agent.tools.registry import ToolRegistry
+    from pycode_agent.tools.base import ToolContext
+    from pycode_agent.security.policy import Policy
+    from pycode_agent.security.approval import Approval
+    from pycode_agent.logs.audit import AuditLog
+    from pycode_agent.utils.diff import PatchManager
+
+    (tmp_path / "f.txt").write_text("old line\n", encoding="utf-8")
+    seen = {}
+    def fake_prompt(_):
+        return "n"  # reject
+    def fake_out(msg):
+        seen.setdefault("text", "")
+        seen["text"] += msg + "\n"
+    reg = ToolRegistry(); reg.register(WriteFile())
+    ctx = ToolContext(project_dir=tmp_path, patch_manager=PatchManager())
+    agent = Agent(
+        provider=FakeLLMProvider(script=[
+            LLMResponse(tool_calls=[ToolCall(id="c1", name="write_file",
+                        arguments={"path": "f.txt", "content": "new line\n"})]),
+            LLMResponse(text="done"),
+        ]),
+        registry=reg, policy=Policy(mode="confirm"),
+        approval=Approval(prompt_fn=fake_prompt, out_fn=fake_out, auto_yes=False),
+        audit=AuditLog(tmp_path / "audit.jsonl"),
+        ctx=ctx, max_turns=8,
+    )
+    agent.run("write the file")
+    # the diff (showing -old line / +new line) should have been shown to the user
+    assert "new line" in seen["text"]
+    assert "old line" in seen["text"]
