@@ -10,6 +10,7 @@ class ModelSettings(BaseModel):
     api_key: str | None = None
     timeout: int = 120
     stream: bool = True
+    max_retries: int = 3
 
 
 class SecuritySettings(BaseModel):

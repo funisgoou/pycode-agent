@@ -19,6 +19,7 @@ def _make_provider(settings):
         api_key=settings.model.api_key,
         base_url=settings.model.base_url,
         timeout=settings.model.timeout,
+        max_retries=settings.model.max_retries,
     )
 
 

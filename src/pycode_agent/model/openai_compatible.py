@@ -1,9 +1,13 @@
 from __future__ import annotations
 import json
+import time
 import httpx
+from typing import Callable
 from pycode_agent.core.messages import Message, ToolCall
 from .base import LLMProvider, LLMResponse
-from .errors import AuthError, RateLimitError, TimeoutError, NetworkError, ProviderError
+from .errors import (
+    AuthError, RateLimitError, TimeoutError, NetworkError, ProviderError,
+)
 
 
 def _message_to_dict(m: Message) -> dict:
@@ -21,14 +25,34 @@ def _message_to_dict(m: Message) -> dict:
 
 
 class OpenAICompatibleProvider(LLMProvider):
+    # Errors worth retrying with exponential backoff (transient).
+    _RETRYABLE = (RateLimitError, NetworkError, TimeoutError)
+
     def __init__(self, *, model: str, api_key: str | None, base_url: str = "",
-                 timeout: int = 120, client: httpx.Client | None = None):
+                 timeout: int = 120, client: httpx.Client | None = None,
+                 max_retries: int = 3, backoff_base: float = 0.5,
+                 sleep_fn: Callable[[float], None] = time.sleep):
         self.model = model
         self.api_key = api_key
         self.timeout = timeout
         self._client = client or httpx.Client(base_url=base_url, timeout=timeout)
+        self.max_retries = max_retries
+        self.backoff_base = backoff_base
+        self._sleep = sleep_fn
 
     def chat(self, *, messages: list[Message], tools: list[dict]) -> LLMResponse:
+        attempt = 0
+        while True:
+            try:
+                return self._chat_once(messages=messages, tools=tools)
+            except self._RETRYABLE:
+                if attempt >= self.max_retries:
+                    raise
+                # exponential backoff: base * 2**attempt
+                self._sleep(self.backoff_base * (2 ** attempt))
+                attempt += 1
+
+    def _chat_once(self, *, messages: list[Message], tools: list[dict]) -> LLMResponse:
         payload = {
             "model": self.model,
             "messages": [_message_to_dict(m) for m in messages],
