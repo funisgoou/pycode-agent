@@ -19,10 +19,12 @@ pip install -e ".[dev]"
 ```bash
 export PYCODE_MODEL_NAME=your-model
 export PYCODE_MODEL_BASE_URL=https://api.example.com/v1
-export PYCODE_API_KEY=sk-...
+export PYCODE_MODEL_API_KEY=sk-...
 ```
 
 配置优先级:命令行参数 > 项目配置 > 用户配置 > 环境变量。
+
+`base_url` 可填到 API 根(如 `.../v1`)或完整端点(`.../v1/chat/completions`),两种写法都受支持。
 
 ## 使用
 
@@ -77,12 +79,10 @@ CLI / REPL  →  Agent Loop  →  { LLMProvider, ToolRegistry, ContextScanner }
                                   + Policy / Approval / AuditLog
 ```
 
-- `model/`:`LLMProvider` 抽象,含 OpenAI 兼容实现与可脚本化的 `FakeLLMProvider`(离线测试驱动 Agent Loop)。
+- `model/`:`LLMProvider` 抽象,含 OpenAI 兼容实现(分类异常 + 限流/网络错误指数退避重试)与可脚本化的 `FakeLLMProvider`(离线测试驱动 Agent Loop)。
 - `core/agent.py`:多轮 思考→工具调用→观察 循环,带轮数/调用上限。
 - `tools/`:统一 `Tool` 基类 + 注册表 + 文件/Shell/Git/记忆工具。
 - `security/`:权限策略与确认交互。
-
-设计与实现计划见 `docs/superpowers/`。
 
 ## 已知限制(垂直切片范围)
 

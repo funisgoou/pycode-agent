@@ -6,3 +6,7 @@ __pycache__/
 .venv/
 dist/
 build/
+
+# planning & design docs (kept locally, not published)
+docs/
+项目规划书.md
