@@ -8,6 +8,26 @@ def test_config_list_runs(tmp_path):
     assert result.exit_code == 0
     assert "mode" in result.stdout.lower()
 
+
+def test_config_get_shows_value_and_source(tmp_path):
+    result = runner.invoke(app, ["config", "get", "security.mode", "--project-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "confirm" in result.stdout
+    assert "default" in result.stdout.lower()
+
+
+def test_config_get_unknown_key_exit_1(tmp_path):
+    result = runner.invoke(app, ["config", "get", "model.nope", "--project-dir", str(tmp_path)])
+    assert result.exit_code == 1
+
+
+def test_config_set_then_get(tmp_path):
+    r1 = runner.invoke(app, ["config", "set", "security.mode", "workspace", "--project-dir", str(tmp_path)])
+    assert r1.exit_code == 0
+    r2 = runner.invoke(app, ["config", "get", "security.mode", "--project-dir", str(tmp_path)])
+    assert "workspace" in r2.stdout
+    assert "project" in r2.stdout.lower()
+
 def test_version():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0

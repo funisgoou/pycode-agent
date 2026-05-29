@@ -82,3 +82,29 @@ def config_list(project_dir: Path = typer.Option(Path("."), "--project-dir")):
     typer.echo(f"model.base_url= {settings.model.base_url}")
     typer.echo(f"security.mode = {settings.security.mode}")
     typer.echo(f"allow_shell   = {settings.security.allow_shell}")
+
+
+@config_app.command("get")
+def config_get(key: str, project_dir: Path = typer.Option(Path("."), "--project-dir")):
+    from pycode_agent.config.loader import get_setting_for_dir
+    try:
+        value, source = get_setting_for_dir(project_dir, key)
+    except KeyError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"{key} = {value}  (source: {source})")
+
+
+@config_app.command("set")
+def config_set(key: str, value: str,
+               project_dir: Path = typer.Option(Path("."), "--project-dir")):
+    from pycode_agent.config.loader import set_project_setting
+    try:
+        coerced = set_project_setting(project_dir, key, value)
+    except KeyError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(code=1)
+    except Exception as e:  # validation failure
+        typer.echo(f"error: invalid value for {key}: {e}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"set {key} = {coerced}  (written to project config)")
