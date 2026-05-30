@@ -1,6 +1,10 @@
 from __future__ import annotations
-from pycode_agent.core.messages import Message
+from collections.abc import Iterator
+from pycode_agent.core.messages import Message, ToolCall
 from pycode_agent.model.base import LLMProvider
+from pycode_agent.model.streaming import (
+    StreamEvent, TextDelta, ToolCallStart, ToolCallEnd, ToolResultEvent, TurnEnd,
+)
 from pycode_agent.tools.registry import ToolRegistry
 from pycode_agent.tools.base import ToolContext
 from pycode_agent.security.policy import Policy, Decision
@@ -98,3 +102,66 @@ class Agent:
         if result.ok:
             return result.content
         return f"ERROR: {result.error}"
+
+    def run_stream(self, user_input: str) -> Iterator[StreamEvent]:
+        """Streaming variant of run(). Yields StreamEvent objects.
+
+        Does NOT modify the existing run() method.  The caller consumes
+        events via iteration; the final TurnEnd.text carries the answer.
+        """
+        self.messages.append(Message(role="user", content=user_input))
+        tool_call_count = 0
+        for _ in range(self.max_turns):
+            text_parts: list[str] = []
+            completed_calls: list[ToolCall] = []
+            got_turn_end = False
+            turn_end_text: str | None = None
+
+            for event in self.provider.chat_stream(
+                messages=self.messages, tools=self.registry.schemas()
+            ):
+                if isinstance(event, TextDelta):
+                    text_parts.append(event.text)
+                elif isinstance(event, ToolCallEnd):
+                    completed_calls.append(
+                        ToolCall(id=event.id, name=event.name, arguments=event.arguments)
+                    )
+                elif isinstance(event, TurnEnd):
+                    got_turn_end = True
+                    turn_end_text = event.text
+                else:
+                    # ToolCallStart — yield immediately
+                    pass
+                yield event
+
+            if not completed_calls:
+                # Final text answer
+                text = "".join(text_parts) if text_parts else (turn_end_text or "")
+                if not got_turn_end:
+                    yield TurnEnd(text=text)
+                elif turn_end_text is None:
+                    # Provider emitted a TurnEnd with None text but we have TextDeltas
+                    pass  # text was already printed via TextDeltas
+                self.messages.append(Message(role="assistant", content=text))
+                return
+
+            # Tool calls — append assistant message with tool_calls
+            self.messages.append(Message(role="assistant", tool_calls=completed_calls))
+
+            for call in completed_calls:
+                tool_call_count += 1
+                if tool_call_count > self.max_tool_calls:
+                    yield TurnEnd(text="Stopped: reached max tool calls.")
+                    return
+                result = self._handle_call(call)
+                yield ToolResultEvent(
+                    tool_call_id=call.id,
+                    ok=result.ok,
+                    content=result.content,
+                    error=result.error,
+                )
+                self.messages.append(
+                    Message(role="tool", tool_call_id=call.id, content=self._render(result))
+                )
+
+        yield TurnEnd(text="Stopped: reached max turns without a final answer.")

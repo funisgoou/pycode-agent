@@ -1,7 +1,30 @@
 from __future__ import annotations
 import json
+import os
 import sys
 from pathlib import Path
+
+
+def _fix_windows_encoding() -> None:
+    """Ensure stdout/stderr use UTF-8 on Windows (default is GBK/cp936)."""
+    if sys.platform != "win32":
+        return
+    # Set console code page to UTF-8
+    try:
+        os.system("chcp 65001 >nul 2>&1")
+    except OSError:
+        pass
+    # Reconfigure Python std streams to UTF-8
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+
+
+_fix_windows_encoding()
+
 import typer
 from pycode_agent import __version__
 from pycode_agent.config.loader import load_settings
@@ -20,6 +43,7 @@ def _make_provider(settings):
         base_url=settings.model.base_url,
         timeout=settings.model.timeout,
         max_retries=settings.model.max_retries,
+        stream=settings.model.stream,
     )
 
 

@@ -6,7 +6,8 @@ from .base import LLMProvider, LLMResponse
 class FakeLLMProvider(LLMProvider):
     """Deterministic provider driven by a scripted list of responses."""
 
-    def __init__(self, script: list[LLMResponse]):
+    def __init__(self, script: list[LLMResponse], *, model: str = "fake"):
+        self.model = model
         self._script = list(script)
         self._i = 0
         self.calls: list[list[Message]] = []
