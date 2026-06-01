@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pycode_agent.core.session import Session
+from pycode_agent.core.session import SessionStore
 from pycode_agent.core.messages import Message, ToolCall
 
 
@@ -37,3 +38,53 @@ def test_make_title_truncates_to_50_chars_and_strips_newlines():
 def test_make_title_empty_when_no_user_message():
     msgs = [Message(role="system", content="S")]
     assert Session.make_title(msgs) == "(empty)"
+
+
+def _tmp_sessions(tmp=None):
+    import tempfile
+    from pathlib import Path
+    return Path(tempfile.mkdtemp()) / "sessions"
+
+
+def test_store_new_id_format():
+    store = SessionStore(_tmp_sessions())
+    sid = store.new_id()
+    parts = sid.split("-")
+    assert len(parts) == 3
+    assert len(parts[0]) == 8 and len(parts[1]) == 6 and len(parts[2]) == 4
+
+
+def test_store_new_session_has_id_and_timestamp():
+    store = SessionStore(_tmp_sessions())
+    s = store.new_session()
+    assert s.id and s.created_at
+    assert s.messages == []
+    assert s.title == "(empty)"
+
+
+def test_store_save_then_load_roundtrip(tmp_path):
+    store = SessionStore(tmp_path / "sessions")
+    s = store.new_session()
+    s.messages.append(Message(role="user", content="hello"))
+    s.title = Session.make_title(s.messages)
+    store.save(s)
+    loaded = store.load(s.id)
+    assert loaded.id == s.id
+    assert loaded.messages[0].content == "hello"
+    assert loaded.title == "hello"
+
+
+def test_store_save_is_atomic_no_tmp_left(tmp_path):
+    store = SessionStore(tmp_path / "sessions")
+    s = store.new_session()
+    store.save(s)
+    files = list((tmp_path / "sessions").iterdir())
+    assert any(f.name == f"{s.id}.json" for f in files)
+    assert not any(f.suffix == ".tmp" for f in files)
+
+
+def test_store_load_unknown_raises_keyerror(tmp_path):
+    store = SessionStore(tmp_path / "sessions")
+    import pytest
+    with pytest.raises(KeyError):
+        store.load("nope")
