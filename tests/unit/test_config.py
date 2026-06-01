@@ -73,3 +73,11 @@ def test_set_project_setting_coerces_types(tmp_path):
     s = load_settings(tmp_path)
     assert s.agent.max_turns == 5
     assert s.security.allow_shell is False
+
+
+def test_model_settings_compaction_defaults():
+    from pycode_agent.config.settings import ModelSettings
+    m = ModelSettings()
+    assert m.context_budget == 96000
+    assert m.compaction_ratio == 0.8
+    assert m.keep_recent_turns == 6
