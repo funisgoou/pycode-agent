@@ -17,16 +17,12 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
     console = Console()
 
     console.print("[bold green]PyCodeAgent[/] - 输入 /help 查看可用命令, /exit 退出")
-    provider = provider_factory(settings)
-    agent = build_agent_with_provider(
-        provider=provider, project_dir=project_dir, settings=settings, auto_yes=False
-    )
 
+    # Lazy-init: agent is only built on first real user query, so startup
+    # (printing the welcome message + prompt) is instant.
+    agent = None
+    slash_ctx: SlashContext | None = None
     registry = build_builtin_registry()
-    slash_ctx = SlashContext(
-        args="", agent=agent, settings=settings,
-        project_dir=project_dir, console=console,
-    )
 
     while True:
         try:
@@ -38,8 +34,13 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
         if not user:
             continue
 
-        # Slash commands
+        # Slash commands (these don't need a fully-built agent for most cases)
         if user.startswith("/"):
+            # Build agent lazily if the command needs it (e.g. /status)
+            if agent is None:
+                agent, slash_ctx = _init_agent(
+                    project_dir, settings, provider_factory, console
+                )
             try:
                 handled = registry.dispatch(user, slash_ctx)
             except SystemExit:
@@ -47,6 +48,13 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
             if not handled:
                 console.print("[red]未知命令, 输入 /help 查看可用命令[/]")
             continue
+
+        # First real query — build agent now, then stream the response.
+        if agent is None:
+            with console.status("[dim]Initializing...[/]", spinner="dots"):
+                agent, slash_ctx = _init_agent(
+                    project_dir, settings, provider_factory, console
+                )
 
         # Normal agent interaction via streaming
         try:
@@ -71,6 +79,19 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
         except Exception as e:  # noqa
             console.print(f"\n[bold red]Error:[/] {e}")
             continue
+
+
+def _init_agent(project_dir, settings, provider_factory, console):
+    """Build provider + agent + slash context. Called lazily on first use."""
+    provider = provider_factory(settings)
+    agent = build_agent_with_provider(
+        provider=provider, project_dir=project_dir, settings=settings, auto_yes=False
+    )
+    ctx = SlashContext(
+        args="", agent=agent, settings=settings,
+        project_dir=project_dir, console=console,
+    )
+    return agent, ctx
 
 
 def _handle_event(event: StreamEvent, console: Console, answer_parts: list[str]):

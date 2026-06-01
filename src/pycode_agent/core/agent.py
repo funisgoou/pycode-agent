@@ -13,7 +13,8 @@ from pycode_agent.logs.audit import AuditLog
 
 SYSTEM_PROMPT = (
     "You are PyCodeAgent, a terminal coding assistant. "
-    "Use the provided tools to read, search, and modify the project. "
+    "Only use tools when the user's request requires reading, searching, or modifying code. "
+    "For casual conversation (greetings, general questions), respond directly without tools. "
     "High-risk actions require user confirmation. Be concise."
 )
 
@@ -34,9 +35,28 @@ class Agent:
         self.system_prefix = system_prefix
         self.dry_run = dry_run
         self.rejections = 0
+        self._project_scanned = False
         self.messages: list[Message] = [
-            Message(role="system", content=SYSTEM_PROMPT + ("\n\n" + system_prefix if system_prefix else ""))
+            Message(role="system", content=SYSTEM_PROMPT)
         ]
+
+    def _ensure_project_profile(self) -> None:
+        """Lazily scan project and inject profile into the system message.
+
+        Only runs once, and only when the LLM actually calls a tool.
+        Simple greetings skip this entirely.
+        """
+        if self._project_scanned:
+            return
+        self._project_scanned = True
+        from pycode_agent.context.scanner import scan_project
+        profile = scan_project(self.ctx.project_dir)
+        if profile.tree:
+            prefix = "Project profile:\n" + profile.summary()
+            self.messages[0] = Message(
+                role="system",
+                content=SYSTEM_PROMPT + "\n\n" + prefix,
+            )
 
     def run(self, user_input: str) -> str:
         self.messages.append(Message(role="user", content=user_input))
@@ -59,6 +79,8 @@ class Agent:
         return "Stopped: reached max turns without a final answer."
 
     def _handle_call(self, call):
+        # First tool call ever → lazily scan project and enrich system prompt.
+        self._ensure_project_profile()
         tool = self.registry.get(call.name)
         if tool is None:
             from pycode_agent.core.messages import ToolResult

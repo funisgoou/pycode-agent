@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -32,16 +33,31 @@ def scan_project(root: Path) -> ProjectProfile:
     root = Path(root)
     profile = ProjectProfile(root=root)
     marker_files = {"pyproject.toml", "package.json", "go.mod", "Cargo.toml", "pom.xml"}
-    for path in sorted(root.rglob("*")):
-        if any(part in IGNORED_DIRS for part in path.relative_to(root).parts):
-            continue
-        if path.is_file():
-            rel = path.relative_to(root).as_posix()
+
+    # Use os.walk so we can skip ignored directories entirely (prune),
+    # instead of rglob which traverses everything then filters.
+    all_entries: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        # Prune ignored directories IN-PLACE so os.walk won't descend into them.
+        dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS]
+        # Sort dirnames so os.walk visits subdirectories in sorted order.
+        dirnames.sort()
+
+        rel_dir = os.path.relpath(dirpath, root)
+        for fname in sorted(filenames):
+            rel = (fname if rel_dir == "." else f"{rel_dir}/{fname}")
             if len(profile.tree) < MAX_TREE_ENTRIES:
                 profile.tree.append(rel)
-            lang = _LANG_BY_EXT.get(path.suffix)
-            if lang:
-                profile.languages.add(lang)
-            if path.name in marker_files:
-                profile.markers.append(path.name)
+            all_entries.append(rel)
+
+    # Second pass: detect languages and markers from the collected entries.
+    for rel in all_entries:
+        suffix = os.path.splitext(rel)[1]
+        lang = _LANG_BY_EXT.get(suffix)
+        if lang:
+            profile.languages.add(lang)
+        basename = os.path.basename(rel)
+        if basename in marker_files:
+            profile.markers.append(basename)
+
     return profile
