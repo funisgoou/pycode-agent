@@ -195,7 +195,11 @@ def _cmd_diff(ctx: SlashContext) -> None:
         old.splitlines(keepends=True), current.splitlines(keepends=True),
         fromfile=str(token.path), tofile=str(token.path),
     ))
-    ctx.console.print(rendered or "[dim](no textual diff)[/]")
+    if not rendered:
+        ctx.console.print("[dim](no textual diff)[/]")
+    else:
+        from pycode_agent.cli.render import diff_to_renderable
+        ctx.console.print(diff_to_renderable(rendered))
 
 
 def _cmd_sessions(ctx: SlashContext) -> None:

@@ -273,3 +273,22 @@ class TestSlashCommandRegistry:
         assert any(m.content == "new question" for m in x_reloaded.messages)
         original_reloaded = store.load(original.id)
         assert all(m.content != "new question" for m in original_reloaded.messages)
+
+    def test_diff_highlights_after_edit(self, tmp_path):
+        from pycode_agent.cli.builder import build_agent_with_provider
+        from pycode_agent.config.settings import Settings
+        from pycode_agent.model.fake import FakeLLMProvider
+        from pycode_agent.model.base import LLMResponse
+        provider = FakeLLMProvider([LLMResponse(text="ok")])
+        agent = build_agent_with_provider(
+            provider=provider, project_dir=tmp_path, settings=Settings())
+        pm = agent.ctx.patch_manager
+        f = tmp_path / "x.txt"
+        pm.apply(f, "new content\n")
+        buf = StringIO()
+        console = Console(file=buf, force_terminal=False, no_color=True)
+        ctx = _make_ctx(tmp_path, console=console, agent=agent)
+        reg = build_builtin_registry()
+        assert reg.dispatch("/diff", ctx) is True
+        out = buf.getvalue()
+        assert "new content" in out
