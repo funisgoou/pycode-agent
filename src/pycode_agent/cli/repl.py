@@ -1,15 +1,13 @@
 from __future__ import annotations
 
+import itertools
 from pathlib import Path
 from rich.console import Console
-from rich.markdown import Markdown
 
 from pycode_agent.cli.builder import build_agent_with_provider
 from pycode_agent.cli.commands import SlashContext, build_builtin_registry
+from pycode_agent.cli.render import status_line, StreamRenderer
 from pycode_agent.core.session import SessionStore
-from pycode_agent.model.streaming import (
-    StreamEvent, TextDelta, ToolCallStart, ToolCallEnd, ToolResultEvent, TurnEnd,
-)
 
 
 def _make_prompt_reader(project_dir: Path, commands: list[str]):
@@ -100,21 +98,17 @@ def run_repl(*, project_dir: Path, settings, provider_factory,
                     session_store=session_store, resumed_session=resumed_session,
                 )
 
-        # Normal agent interaction via streaming.
-        # Spinner only covers waiting for the FIRST event; once it arrives we
-        # drop the spinner and print immediately so the first token is not
-        # visually delayed behind the spinner.
-        try:
-            answer_parts: list[str] = []
+        # Status line (scrolls with content) above the streamed response.
+        console.print(status_line(agent, settings))
 
+        # Normal agent interaction via streaming.
+        try:
             with console.status("[dim]Thinking...[/]", spinner="dots"):
                 stream_iter = agent.run_stream(user)
                 first_event = next(stream_iter)
-
-            _handle_event(first_event, console, answer_parts)
-            for event in stream_iter:
-                _handle_event(event, console, answer_parts)
-
+            StreamRenderer(console).consume(
+                itertools.chain([first_event], stream_iter)
+            )
         except StopIteration:
             pass
         except SystemExit:
@@ -131,6 +125,7 @@ def _init_agent(project_dir, settings, provider_factory, console,
     agent = build_agent_with_provider(
         provider=provider, project_dir=project_dir, settings=settings, auto_yes=False,
         session_store=session_store, session=resumed_session,
+        confirm_console=console,
     )
     ctx = SlashContext(
         args="", agent=agent, settings=settings,
@@ -138,29 +133,3 @@ def _init_agent(project_dir, settings, provider_factory, console,
         session_store=session_store,
     )
     return agent, ctx
-
-
-def _handle_event(event: StreamEvent, console: Console, answer_parts: list[str]):
-    if isinstance(event, TextDelta):
-        console.print(event.text, end="")
-        answer_parts.append(event.text)
-
-    elif isinstance(event, ToolCallStart):
-        console.print(f"\n[dim]  Tool: {event.name}(...)[/dim]")
-
-    elif isinstance(event, ToolCallEnd):
-        pass  # tool call assembled, will be executed
-
-    elif isinstance(event, ToolResultEvent):
-        icon = "[green]ok[/]" if event.ok else "[red]error[/]"
-        brief = event.content[:80] if event.ok else (event.error or "")
-        console.print(f"  {icon} {brief}")
-
-    elif isinstance(event, TurnEnd):
-        # If we accumulated text via TextDelta, it's already printed.
-        # If the provider used fallback (no TextDelta), print now.
-        text = event.text
-        if text and not answer_parts:
-            console.print(Markdown(text))
-        elif answer_parts:
-            console.print()  # final newline after streamed text
