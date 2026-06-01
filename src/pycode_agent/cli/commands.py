@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import subprocess
 from dataclasses import dataclass, field
 from typing import Callable
@@ -185,8 +186,7 @@ def _cmd_diff(ctx: SlashContext) -> None:
     if token is None:
         ctx.console.print("[yellow]没有可显示的修改[/]")
         return
-    # peek_last gives the *applied* state; show old->current by diffing stored old.
-    import difflib
+    # token.old_content is the pre-edit state; diff it against the file's current content.
     current = token.path.read_text(encoding="utf-8") if token.path.is_file() else ""
     old = token.old_content or ""
     rendered = "".join(difflib.unified_diff(

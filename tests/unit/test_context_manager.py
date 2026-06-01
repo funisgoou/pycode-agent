@@ -98,3 +98,47 @@ def test_compact_noop_when_nothing_to_summarize():
     out = cm.compact(msgs, provider)
     assert out == msgs
     assert provider.calls == 0
+
+
+def test_compact_does_not_orphan_tool_message():
+    # Build a history where a positional split would land the boundary on a
+    # tool message whose parent assistant (with tool_calls) is in the old slice.
+    from pycode_agent.core.messages import ToolCall
+    cm = _cm(keep_recent_turns=2)  # keep = 4 messages
+    msgs = [Message(role="system", content="SYS")]
+    # 2 plain exchanges (4 msgs) ...
+    for i in range(2):
+        msgs.append(Message(role="user", content=f"u{i}"))
+        msgs.append(Message(role="assistant", content=f"a{i}"))
+    # ... then a tool sequence: assistant(tool_calls) + tool result, then a
+    # trailing exchange. With keep=4 the naive split's recent slice begins on
+    # the tool message while its parent assistant is summarized away.
+    msgs.append(Message(role="assistant", tool_calls=[ToolCall(id="t1", name="read_file", arguments={})]))
+    msgs.append(Message(role="tool", tool_call_id="t1", content="file contents"))
+    msgs.append(Message(role="assistant", content="done"))
+    msgs.append(Message(role="user", content="next"))
+    msgs.append(Message(role="assistant", content="final"))
+    # Total non-system = 9. keep=4 takes the last 4 (tool, done, next, final),
+    # orphaning the tool result whose parent assistant(tool_calls) is in old.
+    provider = _FakeProvider(summary="S")
+    out = cm.compact(msgs, provider)
+    # Invariant: no tool message may appear without an immediately-preceding
+    # assistant message that has tool_calls.
+    for idx, m in enumerate(out):
+        if m.role == "tool":
+            assert idx > 0
+            prev = out[idx - 1]
+            assert prev.role == "assistant" and prev.tool_calls, (
+                f"orphaned tool message at index {idx}"
+            )
+
+
+def test_compact_keep_zero_summarizes_all_non_system():
+    cm = _cm(keep_recent_turns=0)
+    msgs = _conversation(n_old=3)  # system + 6 messages
+    provider = _FakeProvider(summary="ALLSUM")
+    out = cm.compact(msgs, provider)
+    # system + summary only; no original non-system messages retained
+    assert out[0].content == "SYS"
+    assert any("ALLSUM" in (m.content or "") for m in out)
+    assert all(m.content not in ("old user 0", "old asst 0") for m in out)

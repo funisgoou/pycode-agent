@@ -45,9 +45,24 @@ class ContextManager:
         system = messages[0] if messages[0].role == "system" else None
         rest = messages[1:] if system is not None else messages
         keep = self.keep_recent_turns * 2
-        if len(rest) <= keep:
-            return messages  # nothing old enough to summarize
-        old, recent = rest[:-keep], rest[-keep:]
+        if keep <= 0:
+            split = len(rest)  # keep nothing recent; summarize all non-system
+        else:
+            if len(rest) <= keep:
+                return messages  # nothing old enough to summarize
+            split = len(rest) - keep
+            # Never let the recent slice begin on a tool message whose parent
+            # assistant (with tool_calls) would be summarized away. Advance the
+            # boundary forward until recent[0] is not an orphaned tool message.
+            while split < len(rest) and rest[split].role == "tool":
+                split += 1
+        if split >= len(rest):
+            # keep==0 path, or everything advanced into 'old': recent is empty.
+            old, recent = rest, []
+        else:
+            old, recent = rest[:split], rest[split:]
+        if not old:
+            return messages  # nothing to summarize after boundary adjustment
 
         transcript = "\n".join(
             f"{m.role}: {m.content}" for m in old if m.content
