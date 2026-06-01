@@ -93,7 +93,7 @@ def main(
         try:
             resumed_session = store.load(resume)
         except KeyError:
-            typer.echo(f"error: session not found: {resume}")
+            typer.echo(f"error: session not found: {resume}", err=True)
             raise typer.Exit(code=1)
     elif continue_latest:
         resumed_session = store.latest()

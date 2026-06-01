@@ -275,4 +275,11 @@ def test_resume_unknown_id_exits_1(tmp_path):
     runner = CliRunner()
     result = runner.invoke(app, ["-p", "hi", "--resume", "nope", "--project-dir", str(tmp_path)])
     assert result.exit_code == 1
-    assert "not found" in (result.stdout + str(result.exception)).lower()
+    # message may go to stderr depending on click version; check all available streams
+    combined = result.output + str(result.exception)
+    for attr in ("stderr",):
+        try:
+            combined += getattr(result, attr) or ""
+        except (ValueError, AttributeError):
+            pass
+    assert "not found" in combined.lower()
