@@ -38,3 +38,36 @@ class ContextManager:
 
     def should_compact(self, messages: list[Message]) -> bool:
         return self.estimate_tokens(messages) > int(self.budget * self.ratio)
+
+    def compact(self, messages: list[Message], provider: LLMProvider) -> list[Message]:
+        if not messages:
+            return messages
+        system = messages[0] if messages[0].role == "system" else None
+        rest = messages[1:] if system is not None else messages
+        keep = self.keep_recent_turns * 2
+        if len(rest) <= keep:
+            return messages  # nothing old enough to summarize
+        old, recent = rest[:-keep], rest[-keep:]
+
+        transcript = "\n".join(
+            f"{m.role}: {m.content}" for m in old if m.content
+        )
+        head: list[Message] = [system] if system is not None else []
+        try:
+            resp = provider.chat(
+                messages=[
+                    Message(role="system", content=_SUMMARY_SYSTEM),
+                    Message(role="user", content=transcript),
+                ],
+                tools=[],
+            )
+            summary = resp.text or ""
+            if summary:
+                head.append(Message(
+                    role="system",
+                    content="Summary of earlier conversation:\n" + summary,
+                ))
+        except Exception:
+            # Fall back to plain truncation: drop old messages entirely.
+            pass
+        return head + recent
