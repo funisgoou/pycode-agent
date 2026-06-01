@@ -230,6 +230,10 @@ def _cmd_resume(ctx: SlashContext) -> None:
         ctx.console.print(f"[yellow]未找到会话: {sid}[/]")
         return
     ctx.agent.messages = list(session.messages)
+    # Rebind the persistence sink so subsequent turns write to THIS session's
+    # file, not the agent's original one.
+    from pycode_agent.cli.builder import _make_session_sink
+    ctx.agent.session_sink = _make_session_sink(store, session)
     ctx.console.print(f"[green]已切换到会话 {sid}({len(session.messages)} 条消息)[/]")
 
 

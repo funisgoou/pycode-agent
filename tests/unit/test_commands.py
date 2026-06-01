@@ -229,3 +229,47 @@ class TestSlashCommandRegistry:
         reg = build_builtin_registry()
         assert reg.dispatch("/resume nope", ctx) is True
         assert "未找到" in buf.getvalue() or "not found" in buf.getvalue().lower()
+
+    def test_resume_rebinds_sink_to_target_session(self, tmp_path):
+        # After /resume X, continued turns must persist into X's file, not the
+        # agent's original session file.
+        from pycode_agent.cli.builder import build_agent_with_provider
+        from pycode_agent.config.settings import Settings
+        from pycode_agent.core.session import SessionStore
+        from pycode_agent.core.messages import Message
+        from pycode_agent.model.fake import FakeLLMProvider
+        from pycode_agent.model.base import LLMResponse
+
+        store = SessionStore(tmp_path / ".pycode" / "sessions")
+        # target session X to resume into
+        x = store.new_session()
+        x.messages = [Message(role="system", content="S"), Message(role="user", content="old x")]
+        x.title = "old x"
+        store.save(x)
+
+        # build an agent with its OWN fresh session (original), persisted so we
+        # can later prove it was not clobbered.
+        provider = FakeLLMProvider([LLMResponse(text="reply A"), LLMResponse(text="reply B")])
+        original = store.new_session()
+        original.messages = [Message(role="system", content="S"), Message(role="user", content="orig")]
+        original.title = "orig"
+        store.save(original)
+        agent = build_agent_with_provider(
+            provider=provider, project_dir=tmp_path, settings=Settings(),
+            session_store=store, session=original)
+
+        buf = StringIO()
+        console = Console(file=buf, force_terminal=False, no_color=True)
+        ctx = _make_ctx(tmp_path, console=console, agent=agent)
+        ctx.session_store = store
+        reg = build_builtin_registry()
+
+        # resume into X, then run a turn
+        assert reg.dispatch(f"/resume {x.id}", ctx) is True
+        agent.run("new question")
+
+        # X's file must now contain the new turn; original must NOT have been clobbered with X's content
+        x_reloaded = store.load(x.id)
+        assert any(m.content == "new question" for m in x_reloaded.messages)
+        original_reloaded = store.load(original.id)
+        assert all(m.content != "new question" for m in original_reloaded.messages)
