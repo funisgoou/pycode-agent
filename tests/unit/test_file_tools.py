@@ -50,3 +50,42 @@ def test_absolute_path_blocked_via_dispatch(tmp_path):
     outside = "/etc/hosts" if not str(tmp_path).startswith("C:") else "C:/Windows/win.ini"
     res = reg.dispatch("read_file", {"path": outside}, _ctx(tmp_path))
     assert not res.ok
+
+
+def test_str_replace_unique_match(tmp_path):
+    from pycode_agent.tools.file_tools import StrReplace, StrReplaceArgs
+    (tmp_path / "f.py").write_text("alpha\nbeta\ngamma\n", encoding="utf-8")
+    ctx = _ctx(tmp_path)
+    res = StrReplace().run(StrReplaceArgs(path="f.py", old_string="beta", new_string="BETA"), ctx)
+    assert res.ok
+    assert (tmp_path / "f.py").read_text() == "alpha\nBETA\ngamma\n"
+
+
+def test_str_replace_not_found(tmp_path):
+    from pycode_agent.tools.file_tools import StrReplace, StrReplaceArgs
+    (tmp_path / "f.py").write_text("alpha\n", encoding="utf-8")
+    ctx = _ctx(tmp_path)
+    res = StrReplace().run(StrReplaceArgs(path="f.py", old_string="zzz", new_string="x"), ctx)
+    assert not res.ok and "not found" in res.error
+
+
+def test_str_replace_not_unique(tmp_path):
+    from pycode_agent.tools.file_tools import StrReplace, StrReplaceArgs
+    (tmp_path / "f.py").write_text("dup\ndup\n", encoding="utf-8")
+    ctx = _ctx(tmp_path)
+    res = StrReplace().run(StrReplaceArgs(path="f.py", old_string="dup", new_string="x"), ctx)
+    assert not res.ok and "not unique" in res.error
+
+
+def test_str_replace_refuses_sensitive(tmp_path):
+    from pycode_agent.tools.file_tools import StrReplace, StrReplaceArgs
+    ctx = _ctx(tmp_path)
+    res = StrReplace().run(StrReplaceArgs(path=".env", old_string="a", new_string="b"), ctx)
+    assert not res.ok and "sensitive" in res.error
+
+
+def test_str_replace_missing_file(tmp_path):
+    from pycode_agent.tools.file_tools import StrReplace, StrReplaceArgs
+    ctx = _ctx(tmp_path)
+    res = StrReplace().run(StrReplaceArgs(path="nope.py", old_string="a", new_string="b"), ctx)
+    assert not res.ok and "not a file" in res.error
