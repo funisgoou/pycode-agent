@@ -1,5 +1,6 @@
 from __future__ import annotations
 from collections.abc import Iterator
+from typing import Callable
 from pycode_agent.core.messages import Message, ToolCall
 from pycode_agent.core.context_manager import ContextManager
 from pycode_agent.model.base import LLMProvider
@@ -25,7 +26,8 @@ class Agent:
                  policy: Policy, approval: Approval, audit: AuditLog,
                  ctx: ToolContext, max_turns: int = 12, max_tool_calls: int = 40,
                  system_prefix: str = "", dry_run: bool = False,
-                 context_manager: ContextManager | None = None):
+                 context_manager: ContextManager | None = None,
+                 session_sink: Callable[[list[Message]], None] | None = None):
         self.provider = provider
         self.registry = registry
         self.policy = policy
@@ -37,6 +39,7 @@ class Agent:
         self.system_prefix = system_prefix
         self.dry_run = dry_run
         self.context_manager = context_manager
+        self.session_sink = session_sink
         self.rejections = 0
         self._project_scanned = False
         self.messages: list[Message] = [
@@ -66,6 +69,14 @@ class Agent:
         if cm is not None and cm.should_compact(self.messages):
             self.messages = cm.compact(self.messages, self.provider)
 
+    def _persist(self) -> None:
+        if self.session_sink is None:
+            return
+        try:
+            self.session_sink(self.messages)
+        except Exception:
+            pass  # persistence must never break the agent loop
+
     def run(self, user_input: str) -> str:
         self.messages.append(Message(role="user", content=user_input))
         tool_call_count = 0
@@ -75,6 +86,7 @@ class Agent:
             if not resp.tool_calls:
                 text = resp.text or ""
                 self.messages.append(Message(role="assistant", content=text))
+                self._persist()
                 return text
             self.messages.append(Message(role="assistant", tool_calls=resp.tool_calls))
             for call in resp.tool_calls:
@@ -85,6 +97,7 @@ class Agent:
                 )
                 if tool_call_count >= self.max_tool_calls:
                     return "Stopped: reached max tool calls."
+            self._persist()
         return "Stopped: reached max turns without a final answer."
 
     def _handle_call(self, call):
@@ -175,6 +188,7 @@ class Agent:
                     # Provider emitted a TurnEnd with None text but we have TextDeltas
                     pass  # text was already printed via TextDeltas
                 self.messages.append(Message(role="assistant", content=text))
+                self._persist()
                 return
 
             # Tool calls — append assistant message with tool_calls
@@ -195,5 +209,6 @@ class Agent:
                 self.messages.append(
                     Message(role="tool", tool_call_id=call.id, content=self._render(result))
                 )
+            self._persist()
 
         yield TurnEnd(text="Stopped: reached max turns without a final answer.")
