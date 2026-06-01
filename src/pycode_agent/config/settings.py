@@ -31,6 +31,7 @@ class ContextSettings(BaseModel):
 class AgentSettings(BaseModel):
     max_turns: int = 12
     max_tool_calls: int = 40
+    persist_sessions: bool = True
 
 
 class Settings(BaseModel):

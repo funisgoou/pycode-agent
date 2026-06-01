@@ -6,6 +6,7 @@ from rich.markdown import Markdown
 
 from pycode_agent.cli.builder import build_agent_with_provider
 from pycode_agent.cli.commands import SlashContext, build_builtin_registry
+from pycode_agent.core.session import SessionStore
 from pycode_agent.model.streaming import (
     StreamEvent, TextDelta, ToolCallStart, ToolCallEnd, ToolResultEvent, TurnEnd,
 )
@@ -40,12 +41,19 @@ def _make_prompt_reader(project_dir: Path, commands: list[str]):
         return _read
 
 
-def run_repl(*, project_dir: Path, settings, provider_factory):
+def run_repl(*, project_dir: Path, settings, provider_factory,
+             session_store=None, resumed_session=None):
     # Create Console inside the function so it picks up the UTF-8
     # reconfiguration done by _fix_windows_encoding() in main.py.
     console = Console()
 
+    if session_store is None:
+        session_store = SessionStore(project_dir / ".pycode" / "sessions")
+
     console.print("[bold green]PyCodeAgent[/] - 输入 /help 查看可用命令, /exit 退出")
+
+    if resumed_session is not None:
+        console.print(f"[dim]已恢复会话 {resumed_session.id}({len(resumed_session.messages)} 条消息)[/]")
 
     # Lazy-init: agent is only built on first real user query, so startup
     # (printing the welcome message + prompt) is instant.
@@ -54,7 +62,8 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
     registry = build_builtin_registry()
 
     commands = ["/help", "/model", "/config", "/status", "/clear", "/undo",
-                "/tools", "/tokens", "/memory", "/diff", "/exit", "/quit"]
+                "/tools", "/tokens", "/memory", "/diff", "/sessions", "/resume",
+                "/exit", "/quit"]
     read_input = _make_prompt_reader(project_dir, commands)
 
     while True:
@@ -72,7 +81,8 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
             # Build agent lazily if the command needs it (e.g. /status)
             if agent is None:
                 agent, slash_ctx = _init_agent(
-                    project_dir, settings, provider_factory, console
+                    project_dir, settings, provider_factory, console,
+                    session_store=session_store, resumed_session=resumed_session,
                 )
             try:
                 handled = registry.dispatch(user, slash_ctx)
@@ -86,7 +96,8 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
         if agent is None:
             with console.status("[dim]Initializing...[/]", spinner="dots"):
                 agent, slash_ctx = _init_agent(
-                    project_dir, settings, provider_factory, console
+                    project_dir, settings, provider_factory, console,
+                    session_store=session_store, resumed_session=resumed_session,
                 )
 
         # Normal agent interaction via streaming.
@@ -113,15 +124,18 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
             continue
 
 
-def _init_agent(project_dir, settings, provider_factory, console):
+def _init_agent(project_dir, settings, provider_factory, console,
+                session_store=None, resumed_session=None):
     """Build provider + agent + slash context. Called lazily on first use."""
     provider = provider_factory(settings)
     agent = build_agent_with_provider(
-        provider=provider, project_dir=project_dir, settings=settings, auto_yes=False
+        provider=provider, project_dir=project_dir, settings=settings, auto_yes=False,
+        session_store=session_store, session=resumed_session,
     )
     ctx = SlashContext(
         args="", agent=agent, settings=settings,
         project_dir=project_dir, console=console,
+        session_store=session_store,
     )
     return agent, ctx
 

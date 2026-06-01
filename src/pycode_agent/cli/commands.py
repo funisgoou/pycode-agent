@@ -15,6 +15,7 @@ class SlashContext:
     settings: object
     project_dir: object  # Path
     console: Console
+    session_store: object = None  # SessionStore | None (avoid import cycle)
 
 
 @dataclass
@@ -52,6 +53,7 @@ class SlashCommandRegistry:
             settings=ctx.settings,
             project_dir=ctx.project_dir,
             console=ctx.console,
+            session_store=ctx.session_store,
         ))
         return True
 
@@ -196,6 +198,45 @@ def _cmd_diff(ctx: SlashContext) -> None:
     ctx.console.print(rendered or "[dim](no textual diff)[/]")
 
 
+def _cmd_sessions(ctx: SlashContext) -> None:
+    """列出本项目的会话"""
+    store = ctx.session_store
+    if store is None:
+        ctx.console.print("[yellow]会话存储未启用[/]")
+        return
+    from datetime import datetime
+    meta = store.list_meta()
+    if not meta:
+        ctx.console.print("[dim](no sessions)[/]")
+        return
+    for m in meta:
+        when = datetime.fromtimestamp(m["mtime"]).strftime("%Y-%m-%d %H:%M")
+        ctx.console.print(f'  {m["id"]}  {when}  turns={m["turns"]}  {m["title"]}')
+
+
+def _cmd_resume(ctx: SlashContext) -> None:
+    """切换到指定会话: /resume <id>"""
+    store = ctx.session_store
+    if store is None:
+        ctx.console.print("[yellow]会话存储未启用[/]")
+        return
+    sid = ctx.args.strip()
+    if not sid:
+        ctx.console.print("[yellow]用法: /resume <id>[/]")
+        return
+    try:
+        session = store.load(sid)
+    except KeyError:
+        ctx.console.print(f"[yellow]未找到会话: {sid}[/]")
+        return
+    ctx.agent.messages = list(session.messages)
+    # Rebind the persistence sink so subsequent turns write to THIS session's
+    # file, not the agent's original one.
+    from pycode_agent.cli.builder import _make_session_sink
+    ctx.agent.session_sink = _make_session_sink(store, session)
+    ctx.console.print(f"[green]已切换到会话 {sid}({len(session.messages)} 条消息)[/]")
+
+
 # ---------------------------------------------------------------------------
 # Registry builder
 # ---------------------------------------------------------------------------
@@ -215,6 +256,8 @@ def build_builtin_registry() -> SlashCommandRegistry:
         ("/tokens", "显示上下文 token 估算", _cmd_tokens),
         ("/memory", "显示项目记忆",       _cmd_memory),
         ("/diff",   "显示最近一次修改 diff", _cmd_diff),
+        ("/sessions", "列出本项目会话",   _cmd_sessions),
+        ("/resume",   "切换到指定会话",   _cmd_resume),
         ("/exit",   "退出 REPL",          _cmd_exit),
         ("/quit",   "退出 REPL",          _cmd_exit),
     ]

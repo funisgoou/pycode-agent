@@ -218,3 +218,56 @@ def test_agent_compacts_when_over_budget(tmp_path):
     assert provider.calls and any(
         m.content == _SUMMARY_MARKER for m in provider.calls[0]
     )
+
+
+def test_agent_session_sink_called_each_turn(tmp_path):
+    from pycode_agent.core.agent import Agent
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.model.base import LLMResponse
+    from pycode_agent.tools.registry import ToolRegistry
+    from pycode_agent.tools.base import ToolContext
+    from pycode_agent.security.policy import Policy
+    from pycode_agent.security.approval import Approval
+    from pycode_agent.logs.audit import AuditLog
+
+    snapshots = []
+    provider = FakeLLMProvider([LLMResponse(text="hello")])
+    agent = Agent(
+        provider=provider,
+        registry=ToolRegistry(),
+        policy=Policy(mode="confirm"),
+        approval=Approval(auto_yes=True),
+        audit=AuditLog(tmp_path / ".pycode" / "audit.jsonl"),
+        ctx=ToolContext(project_dir=tmp_path),
+        session_sink=lambda msgs: snapshots.append([m.role for m in msgs]),
+    )
+    agent.run("hi")
+    assert snapshots
+    assert snapshots[-1][-1] == "assistant"
+    assert "user" in snapshots[-1]
+
+
+def test_agent_session_sink_errors_do_not_crash(tmp_path):
+    from pycode_agent.core.agent import Agent
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.model.base import LLMResponse
+    from pycode_agent.tools.registry import ToolRegistry
+    from pycode_agent.tools.base import ToolContext
+    from pycode_agent.security.policy import Policy
+    from pycode_agent.security.approval import Approval
+    from pycode_agent.logs.audit import AuditLog
+
+    def boom(msgs):
+        raise RuntimeError("disk full")
+
+    provider = FakeLLMProvider([LLMResponse(text="ok")])
+    agent = Agent(
+        provider=provider,
+        registry=ToolRegistry(),
+        policy=Policy(mode="confirm"),
+        approval=Approval(auto_yes=True),
+        audit=AuditLog(tmp_path / ".pycode" / "audit.jsonl"),
+        ctx=ToolContext(project_dir=tmp_path),
+        session_sink=boom,
+    )
+    assert agent.run("hi") == "ok"

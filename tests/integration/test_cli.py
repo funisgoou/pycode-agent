@@ -181,3 +181,105 @@ def test_read_input_falls_back_without_prompt_toolkit(monkeypatch, tmp_path):
     monkeypatch.setattr(builtins, "__import__", fake_import)
     reader = repl_mod._make_prompt_reader(tmp_path, ["/help", "/exit"])
     assert callable(reader)
+
+
+def test_builder_creates_sink_when_persist_enabled(tmp_path):
+    from pycode_agent.cli.builder import build_agent_with_provider
+    from pycode_agent.config.settings import Settings
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.model.base import LLMResponse
+    provider = FakeLLMProvider([LLMResponse(text="ok")])
+    agent = build_agent_with_provider(
+        provider=provider, project_dir=tmp_path, settings=Settings())
+    assert agent.session_sink is not None
+
+
+def test_builder_no_sink_when_persist_disabled(tmp_path):
+    from pycode_agent.cli.builder import build_agent_with_provider
+    from pycode_agent.config.settings import Settings
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.model.base import LLMResponse
+    settings = Settings()
+    settings.agent.persist_sessions = False
+    provider = FakeLLMProvider([LLMResponse(text="ok")])
+    agent = build_agent_with_provider(
+        provider=provider, project_dir=tmp_path, settings=settings)
+    assert agent.session_sink is None
+
+
+def test_builder_injects_resumed_messages(tmp_path):
+    from pycode_agent.cli.builder import build_agent_with_provider
+    from pycode_agent.config.settings import Settings
+    from pycode_agent.core.session import Session
+    from pycode_agent.core.messages import Message
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.model.base import LLMResponse
+    sess = Session(id="s1", title="t", created_at="2026", messages=[
+        Message(role="system", content="OLD SYS"),
+        Message(role="user", content="earlier"),
+        Message(role="assistant", content="reply"),
+    ])
+    provider = FakeLLMProvider([LLMResponse(text="ok")])
+    agent = build_agent_with_provider(
+        provider=provider, project_dir=tmp_path, settings=Settings(), session=sess)
+    assert agent.messages[0].content == "OLD SYS"
+    assert any(m.content == "earlier" for m in agent.messages)
+
+
+def test_builder_sink_writes_session_file(tmp_path):
+    from pycode_agent.cli.builder import build_agent_with_provider
+    from pycode_agent.config.settings import Settings
+    from pycode_agent.core.session import SessionStore
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.model.base import LLMResponse
+    store = SessionStore(tmp_path / ".pycode" / "sessions")
+    sess = store.new_session()
+    provider = FakeLLMProvider([LLMResponse(text="answer")])
+    agent = build_agent_with_provider(
+        provider=provider, project_dir=tmp_path, settings=Settings(),
+        session_store=store, session=sess)
+    agent.run("question")
+    reloaded = store.load(sess.id)
+    assert any(m.content == "question" for m in reloaded.messages)
+    assert reloaded.title == "question"
+
+
+def test_sessions_list_outputs_titles(tmp_path):
+    from typer.testing import CliRunner
+    from pycode_agent.cli.main import app
+    from pycode_agent.core.session import SessionStore
+    from pycode_agent.core.messages import Message
+    store = SessionStore(tmp_path / ".pycode" / "sessions")
+    s = store.new_session()
+    s.messages = [Message(role="user", content="my first task")]
+    s.title = "my first task"
+    store.save(s)
+    runner = CliRunner()
+    result = runner.invoke(app, ["sessions", "list", "--project-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "my first task" in result.stdout
+
+
+def test_sessions_list_empty(tmp_path):
+    from typer.testing import CliRunner
+    from pycode_agent.cli.main import app
+    runner = CliRunner()
+    result = runner.invoke(app, ["sessions", "list", "--project-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "no sessions" in result.stdout.lower()
+
+
+def test_resume_unknown_id_exits_1(tmp_path):
+    from typer.testing import CliRunner
+    from pycode_agent.cli.main import app
+    runner = CliRunner()
+    result = runner.invoke(app, ["-p", "hi", "--resume", "nope", "--project-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    # message may go to stderr depending on click version; check all available streams
+    combined = result.output + str(result.exception)
+    for attr in ("stderr",):
+        try:
+            combined += getattr(result, attr) or ""
+        except (ValueError, AttributeError):
+            pass
+    assert "not found" in combined.lower()

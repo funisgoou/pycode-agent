@@ -39,6 +39,9 @@ pycode -p "..." --max-turns 3 --quiet     # 限制循环轮数 / 精简输出
 pycode config list                       # 查看当前配置
 pycode config get security.mode          # 查看单项配置及来源
 pycode config set security.mode workspace # 写入项目配置
+pycode --continue                        # 恢复最近一次会话
+pycode --resume 20260601-094530-a3f1     # 按 id 恢复指定会话
+pycode sessions list                     # 列出本项目所有会话
 pycode --version
 ```
 
@@ -86,4 +89,4 @@ CLI / REPL  →  Agent Loop  →  { LLMProvider, ToolRegistry, ContextScanner }
 
 ## 已知限制(垂直切片范围)
 
-切片聚焦核心主链路。已支持:LLM 摘要式上下文压缩(超预算自动触发)、str_replace 局部编辑(唯一串替换)、多级 undo、输入历史与 slash 命令补全、流式输出。以下留待后续:unified-diff hunk 解析(当前为整文件替换 / 唯一串替换)、完整 TUI、MCP/LSP。
+切片聚焦核心主链路。已支持:LLM 摘要式上下文压缩(超预算自动触发)、str_replace 局部编辑(唯一串替换)、多级 undo、输入历史与 slash 命令补全、流式输出、多会话持久化与恢复(--continue/--resume/sessions list、REPL 内 /sessions /resume)。以下留待后续:unified-diff hunk 解析(当前为整文件替换 / 唯一串替换)、完整 TUI、MCP/LSP。
