@@ -29,7 +29,7 @@ export PYCODE_MODEL_API_KEY=sk-...
 ## 使用
 
 ```bash
-pycode                                   # 交互式 REPL(/exit 退出,/undo 撤销上次修改)
+pycode                                   # 交互式 REPL(/help 查看命令: /tools /tokens /memory /diff /undo 等)
 pycode -p "解释这个项目的结构"            # 非交互单次执行
 cat error.log | pycode -p "分析这个报错"  # 管道输入
 pycode -p "写 commit message" --no-tools  # 禁用工具调用
@@ -64,7 +64,7 @@ pycode --version
 ## 工具集
 
 读类(低风险):`read_file` `list_dir` `search_text` `git_status` `git_diff` `memory_read`
-写/执行类(高风险,需确认):`write_file` `edit_file` `run_shell` `memory_write`
+写/执行类(高风险,需确认):`write_file` `edit_file` `str_replace` `run_shell` `memory_write`
 
 ## 测试
 
@@ -86,4 +86,4 @@ CLI / REPL  →  Agent Loop  →  { LLMProvider, ToolRegistry, ContextScanner }
 
 ## 已知限制(垂直切片范围)
 
-切片聚焦核心主链路。以下留待后续:上下文压缩、unified-diff 补丁解析(当前用整文件替换)、流式输出、完整 TUI、MCP/LSP。
+切片聚焦核心主链路。已支持:LLM 摘要式上下文压缩(超预算自动触发)、str_replace 局部编辑(唯一串替换)、多级 undo、输入历史与 slash 命令补全、流式输出。以下留待后续:unified-diff hunk 解析(当前为整文件替换 / 唯一串替换)、完整 TUI、MCP/LSP。
