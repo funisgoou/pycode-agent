@@ -155,3 +155,19 @@ def test_stream_renderer_returns_final_text():
         TextDelta(text="hello"), TurnEnd(text=None),
     ]))
     assert final == "hello"
+
+
+def test_stream_renderer_interleaved_text_tool_text():
+    out = _renderer_output([
+        TextDelta(text="first part"),
+        ToolCallStart(id="t1", name="read_file"),
+        ToolCallEnd(id="t1", name="read_file", arguments={}),
+        ToolResultEvent(tool_call_id="t1", ok=True, content="data", error=None),
+        TextDelta(text="second part"),
+        TurnEnd(text=None),
+    ])
+    # both text segments rendered, tool panel between them, correct order
+    assert "first part" in out
+    assert "second part" in out
+    assert "read_file" in out
+    assert out.index("first part") < out.index("read_file") < out.index("second part")

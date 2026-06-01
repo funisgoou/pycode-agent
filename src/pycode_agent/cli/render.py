@@ -93,6 +93,7 @@ class StreamRenderer:
         elif isinstance(event, ToolCallEnd):
             pass
         elif isinstance(event, ToolResultEvent):
+            self._stop_live()
             name = self._pending_tool or "tool"
             summary = event.content if event.ok else (event.error or "")
             self.console.print(tool_result_panel(name, event.ok, summary))
