@@ -88,3 +88,49 @@ def test_store_load_unknown_raises_keyerror(tmp_path):
     import pytest
     with pytest.raises(KeyError):
         store.load("nope")
+
+
+def _touch_mtime(path, ts):
+    import os
+    os.utime(path, (ts, ts))
+
+
+def test_store_latest_returns_most_recent(tmp_path):
+    store = SessionStore(tmp_path / "sessions")
+    a = store.new_session(); a.id = "20260101-000000-aaaa"; store.save(a)
+    b = store.new_session(); b.id = "20260101-000000-bbbb"; store.save(b)
+    _touch_mtime(store._path(a.id), 1000)
+    _touch_mtime(store._path(b.id), 2000)
+    assert store.latest().id == b.id
+
+
+def test_store_latest_none_when_empty(tmp_path):
+    store = SessionStore(tmp_path / "sessions")
+    assert store.latest() is None
+
+
+def test_store_list_meta_sorted_desc_with_fields(tmp_path):
+    store = SessionStore(tmp_path / "sessions")
+    a = store.new_session(); a.id = "20260101-000000-aaaa"
+    a.messages = [Message(role="user", content="first task"), Message(role="assistant", content="ok"),
+                  Message(role="user", content="second")]
+    a.title = Session.make_title(a.messages); store.save(a)
+    b = store.new_session(); b.id = "20260101-000000-bbbb"
+    b.messages = [Message(role="user", content="other")]
+    b.title = Session.make_title(b.messages); store.save(b)
+    _touch_mtime(store._path(a.id), 1000)
+    _touch_mtime(store._path(b.id), 2000)
+    meta = store.list_meta()
+    assert [m["id"] for m in meta] == [b.id, a.id]
+    a_meta = next(m for m in meta if m["id"] == a.id)
+    assert a_meta["title"] == "first task"
+    assert a_meta["turns"] == 2
+
+
+def test_store_list_meta_skips_corrupt_files(tmp_path):
+    store = SessionStore(tmp_path / "sessions")
+    s = store.new_session(); store.save(s)
+    (tmp_path / "sessions" / "broken.json").write_text("{not json", encoding="utf-8")
+    meta = store.list_meta()
+    assert len(meta) == 1
+    assert meta[0]["id"] == s.id

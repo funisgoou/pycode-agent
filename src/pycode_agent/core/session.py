@@ -75,3 +75,30 @@ class SessionStore:
         if not p.is_file():
             raise KeyError(session_id)
         return Session.from_dict(json.loads(p.read_text(encoding="utf-8")))
+
+    def latest(self) -> Session | None:
+        files = list(self.dir.glob("*.json")) if self.dir.is_dir() else []
+        if not files:
+            return None
+        newest = max(files, key=lambda p: p.stat().st_mtime)
+        return Session.from_dict(json.loads(newest.read_text(encoding="utf-8")))
+
+    def list_meta(self) -> list[dict]:
+        out: list[dict] = []
+        if not self.dir.is_dir():
+            return out
+        for p in self.dir.glob("*.json"):
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                msgs = data.get("messages", [])
+                turns = sum(1 for m in msgs if m.get("role") == "user")
+                out.append({
+                    "id": data.get("id", p.stem),
+                    "mtime": p.stat().st_mtime,
+                    "title": data.get("title", "(empty)"),
+                    "turns": turns,
+                })
+            except (json.JSONDecodeError, OSError):
+                continue
+        out.sort(key=lambda m: m["mtime"], reverse=True)
+        return out
