@@ -5,7 +5,7 @@ from pycode_agent.core.agent import Agent
 from pycode_agent.model.base import LLMProvider
 from pycode_agent.tools.base import ToolContext
 from pycode_agent.tools.registry import ToolRegistry
-from pycode_agent.tools.file_tools import ReadFile, ListDir, SearchText, WriteFile, EditFile
+from pycode_agent.tools.file_tools import ReadFile, ListDir, SearchText, WriteFile, EditFile, StrReplace
 from pycode_agent.tools.shell_tools import RunShell
 from pycode_agent.tools.git_tools import GitStatus, GitDiff
 from pycode_agent.tools.memory_tools import MemoryRead, MemoryWrite
@@ -18,7 +18,7 @@ from pycode_agent.core.context_manager import ContextManager
 
 def _build_registry(settings: Settings) -> ToolRegistry:
     reg = ToolRegistry()
-    for tool in (ReadFile(), ListDir(), SearchText(), WriteFile(), EditFile(),
+    for tool in (ReadFile(), ListDir(), SearchText(), WriteFile(), EditFile(), StrReplace(),
                  GitStatus(), GitDiff(), MemoryRead(), MemoryWrite()):
         reg.register(tool)
     if settings.security.allow_shell:

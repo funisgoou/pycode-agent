@@ -157,3 +157,10 @@ def test_builder_injects_context_manager(tmp_path):
     )
     assert agent.context_manager is not None
     assert agent.context_manager.budget == 96000
+
+
+def test_builder_registers_str_replace(tmp_path):
+    from pycode_agent.cli.builder import _build_registry
+    from pycode_agent.config.settings import Settings
+    reg = _build_registry(Settings())
+    assert reg.get("str_replace") is not None
