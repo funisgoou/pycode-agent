@@ -40,7 +40,10 @@ def _make_prompt_reader(project_dir: Path, commands: list[str]):
         return _read
 
 
-def run_repl(*, project_dir: Path, settings, provider_factory):
+def run_repl(*, project_dir: Path, settings, provider_factory,
+             session_store=None, resumed_session=None):
+    # session_store / resumed_session are accepted here so the CLI can pass
+    # them unconditionally; full REPL resume wiring lands in Task 8.
     # Create Console inside the function so it picks up the UTF-8
     # reconfiguration done by _fix_windows_encoding() in main.py.
     console = Console()

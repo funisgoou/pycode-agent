@@ -242,3 +242,37 @@ def test_builder_sink_writes_session_file(tmp_path):
     reloaded = store.load(sess.id)
     assert any(m.content == "question" for m in reloaded.messages)
     assert reloaded.title == "question"
+
+
+def test_sessions_list_outputs_titles(tmp_path):
+    from typer.testing import CliRunner
+    from pycode_agent.cli.main import app
+    from pycode_agent.core.session import SessionStore
+    from pycode_agent.core.messages import Message
+    store = SessionStore(tmp_path / ".pycode" / "sessions")
+    s = store.new_session()
+    s.messages = [Message(role="user", content="my first task")]
+    s.title = "my first task"
+    store.save(s)
+    runner = CliRunner()
+    result = runner.invoke(app, ["sessions", "list", "--project-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "my first task" in result.stdout
+
+
+def test_sessions_list_empty(tmp_path):
+    from typer.testing import CliRunner
+    from pycode_agent.cli.main import app
+    runner = CliRunner()
+    result = runner.invoke(app, ["sessions", "list", "--project-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "no sessions" in result.stdout.lower()
+
+
+def test_resume_unknown_id_exits_1(tmp_path):
+    from typer.testing import CliRunner
+    from pycode_agent.cli.main import app
+    runner = CliRunner()
+    result = runner.invoke(app, ["-p", "hi", "--resume", "nope", "--project-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "not found" in (result.stdout + str(result.exception)).lower()

@@ -34,6 +34,23 @@ app = typer.Typer(add_completion=False, help="PyCodeAgent — terminal coding as
 config_app = typer.Typer(help="管理配置")
 app.add_typer(config_app, name="config")
 
+sessions_app = typer.Typer(help="管理会话")
+app.add_typer(sessions_app, name="sessions")
+
+
+@sessions_app.command("list")
+def sessions_list(project_dir: Path = typer.Option(Path("."), "--project-dir")):
+    from pycode_agent.core.session import SessionStore
+    from datetime import datetime
+    store = SessionStore(project_dir / ".pycode" / "sessions")
+    meta = store.list_meta()
+    if not meta:
+        typer.echo("(no sessions)")
+        return
+    for m in meta:
+        when = datetime.fromtimestamp(m["mtime"]).strftime("%Y-%m-%d %H:%M")
+        typer.echo(f'{m["id"]}  {when}  turns={m["turns"]}  {m["title"]}')
+
 
 def _make_provider(settings):
     from pycode_agent.model.openai_compatible import OpenAICompatibleProvider
@@ -59,6 +76,8 @@ def main(
     quiet: bool = typer.Option(False, "--quiet", help="仅输出最终结果,抑制额外信息"),
     max_turns: int = typer.Option(None, "--max-turns", help="覆盖最大循环轮数"),
     dry_run: bool = typer.Option(False, "--dry-run", help="高风险操作只预览不执行"),
+    continue_latest: bool = typer.Option(False, "--continue", help="恢复最近一次会话"),
+    resume: str = typer.Option(None, "--resume", help="按 id 恢复指定会话"),
 ):
     if version:
         typer.echo(__version__)
@@ -67,6 +86,19 @@ def main(
         return
 
     settings = load_settings(project_dir)
+    from pycode_agent.core.session import SessionStore
+    store = SessionStore(project_dir / ".pycode" / "sessions")
+    resumed_session = None
+    if resume is not None:
+        try:
+            resumed_session = store.load(resume)
+        except KeyError:
+            typer.echo(f"error: session not found: {resume}")
+            raise typer.Exit(code=1)
+    elif continue_latest:
+        resumed_session = store.latest()
+        if resumed_session is None:
+            typer.echo("(no previous session; starting new)", err=True)
     if prompt is not None:
         stdin_data = "" if sys.stdin.isatty() else sys.stdin.read()
         full = prompt if not stdin_data else f"{prompt}\n\n---\n{stdin_data}"
@@ -74,6 +106,7 @@ def main(
         agent = build_agent_with_provider(
             provider=provider, project_dir=project_dir, settings=settings,
             auto_yes=auto_approve, dry_run=dry_run, max_turns=max_turns,
+            session_store=store, session=resumed_session,
         )
         if no_tools:
             agent.registry = type(agent.registry)()  # empty registry
@@ -97,7 +130,8 @@ def main(
 
     # no prompt, no subcommand -> interactive REPL
     from pycode_agent.cli.repl import run_repl
-    run_repl(project_dir=project_dir, settings=settings, provider_factory=_make_provider)
+    run_repl(project_dir=project_dir, settings=settings, provider_factory=_make_provider,
+             session_store=store, resumed_session=resumed_session)
 
 
 @config_app.command("list")
