@@ -89,7 +89,10 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
                     project_dir, settings, provider_factory, console
                 )
 
-        # Normal agent interaction via streaming
+        # Normal agent interaction via streaming.
+        # Spinner only covers waiting for the FIRST event; once it arrives we
+        # drop the spinner and print immediately so the first token is not
+        # visually delayed behind the spinner.
         try:
             answer_parts: list[str] = []
 
@@ -97,14 +100,10 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
                 stream_iter = agent.run_stream(user)
                 first_event = next(stream_iter)
 
-            # Process first event
             _handle_event(first_event, console, answer_parts)
-
             for event in stream_iter:
                 _handle_event(event, console, answer_parts)
 
-        except StopAsyncIteration:
-            pass
         except StopIteration:
             pass
         except SystemExit:
