@@ -34,3 +34,32 @@ def test_conflict_when_expected_mismatch(tmp_path):
     with pytest.raises(ConflictError):
         pm.apply(f, "new\n", expected_old="something else\n")
     assert f.read_text(encoding="utf-8") == "actual\n"  # 文件未被破坏
+
+
+def test_patch_manager_multilevel_undo(tmp_path):
+    from pycode_agent.utils.diff import PatchManager
+    f = tmp_path / "a.txt"
+    pm = PatchManager()
+    pm.apply(f, "v1")
+    pm.apply(f, "v2")
+    pm.apply(f, "v3")
+    assert f.read_text() == "v3"
+    assert pm.history_size() == 3
+    assert pm.rollback_last() is True
+    assert f.read_text() == "v2"
+    assert pm.rollback_last() is True
+    assert f.read_text() == "v1"
+    assert pm.rollback_last() is True
+    assert not f.exists()  # v1 created the file; rolling back removes it
+    assert pm.rollback_last() is False
+    assert pm.history_size() == 0
+
+
+def test_patch_manager_peek_last(tmp_path):
+    from pycode_agent.utils.diff import PatchManager
+    f = tmp_path / "b.txt"
+    pm = PatchManager()
+    assert pm.peek_last() is None
+    pm.apply(f, "hello")
+    tok = pm.peek_last()
+    assert tok is not None and tok.path == f

@@ -16,10 +16,10 @@ class RollbackToken:
 
 
 class PatchManager:
-    """整文件替换模型:预览 unified diff、应用、回滚最近一次变更。"""
+    """整文件替换模型:预览 unified diff、应用、回滚最近的变更(多级栈)。"""
 
     def __init__(self) -> None:
-        self._last: RollbackToken | None = None
+        self._history: list[RollbackToken] = []
 
     def preview(self, path: Path, new_content: str) -> str:
         old = path.read_text(encoding="utf-8") if path.is_file() else ""
@@ -39,7 +39,7 @@ class PatchManager:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(new_content, encoding="utf-8")
         token = RollbackToken(path=path, existed_before=existed, old_content=old)
-        self._last = token
+        self._history.append(token)
         return token
 
     def rollback(self, token: RollbackToken) -> None:
@@ -50,8 +50,13 @@ class PatchManager:
                 token.path.unlink()
 
     def rollback_last(self) -> bool:
-        if self._last is None:
+        if not self._history:
             return False
-        self.rollback(self._last)
-        self._last = None
+        self.rollback(self._history.pop())
         return True
+
+    def peek_last(self) -> RollbackToken | None:
+        return self._history[-1] if self._history else None
+
+    def history_size(self) -> int:
+        return len(self._history)
