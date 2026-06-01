@@ -4,6 +4,10 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.markdown import Markdown
 from rich.syntax import Syntax
+from rich.live import Live
+from pycode_agent.model.streaming import (
+    TextDelta, ToolCallStart, ToolCallEnd, ToolResultEvent, TurnEnd,
+)
 
 _SUMMARY_MAX = 200
 
@@ -53,3 +57,77 @@ def make_confirm_printer(console) -> Callable[[str], None]:
         else:
             console.print(detail)
     return out_fn
+
+
+class StreamRenderer:
+    """Consume a StreamEvent iterator, rendering to a rich Console.
+
+    Terminal: stream raw text via a Live region, then re-render the
+    completed assistant message as a Markdown panel. Non-terminal
+    (pipes/tests): silently accumulate and print the panel once — no
+    control codes, so output is assertable.
+    """
+
+    def __init__(self, console):
+        self.console = console
+        self._buffer: list[str] = []
+        self._live = None
+        self._pending_tool: str | None = None
+        self.final_text = ""
+
+    def consume(self, events) -> str:
+        try:
+            for event in events:
+                self._handle(event)
+        finally:
+            self._stop_live()
+        return self.final_text
+
+    def _handle(self, event) -> None:
+        if isinstance(event, TextDelta):
+            self._buffer.append(event.text)
+            self._update_live()
+        elif isinstance(event, ToolCallStart):
+            self._finalize_text()
+            self._pending_tool = event.name
+        elif isinstance(event, ToolCallEnd):
+            pass
+        elif isinstance(event, ToolResultEvent):
+            name = self._pending_tool or "tool"
+            summary = event.content if event.ok else (event.error or "")
+            self.console.print(tool_result_panel(name, event.ok, summary))
+            self._pending_tool = None
+        elif isinstance(event, TurnEnd):
+            if self._buffer:
+                self._finalize_text()
+            elif event.text:
+                self.console.print(assistant_panel(event.text))
+                self.final_text += event.text
+
+    def _is_terminal(self) -> bool:
+        return bool(getattr(self.console, "is_terminal", False))
+
+    def _update_live(self) -> None:
+        if not self._is_terminal():
+            return
+        text = Text("".join(self._buffer))
+        if self._live is None:
+            self._live = Live(text, console=self.console,
+                              refresh_per_second=12, transient=False)
+            self._live.start()
+        else:
+            self._live.update(text)
+
+    def _stop_live(self) -> None:
+        if self._live is not None:
+            self._live.stop()
+            self._live = None
+
+    def _finalize_text(self) -> None:
+        if not self._buffer:
+            return
+        text = "".join(self._buffer)
+        self._buffer = []
+        self._stop_live()
+        self.console.print(assistant_panel(text))
+        self.final_text += text
