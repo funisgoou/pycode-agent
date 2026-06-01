@@ -15,6 +15,7 @@ from pycode_agent.logs.audit import AuditLog
 from pycode_agent.utils.diff import PatchManager
 from pycode_agent.core.context_manager import ContextManager
 from pycode_agent.core.session import Session, SessionStore
+from pycode_agent.cli.render import make_confirm_printer
 
 
 def _build_registry(settings: Settings) -> ToolRegistry:
@@ -39,7 +40,8 @@ def build_agent_with_provider(*, provider: LLMProvider, project_dir: Path,
                               settings: Settings, auto_yes: bool = False,
                               dry_run: bool = False, max_turns: int | None = None,
                               session_store: SessionStore | None = None,
-                              session: Session | None = None) -> Agent:
+                              session: Session | None = None,
+                              confirm_console=None) -> Agent:
     project_dir = Path(project_dir)
     pm = PatchManager()
     ctx = ToolContext(project_dir=project_dir, settings=settings, patch_manager=pm)
@@ -55,11 +57,15 @@ def build_agent_with_provider(*, provider: LLMProvider, project_dir: Path,
         if session is None:
             session = session_store.new_session()
         sink = _make_session_sink(session_store, session)
+    if confirm_console is not None:
+        approval = Approval(auto_yes=auto_yes, out_fn=make_confirm_printer(confirm_console))
+    else:
+        approval = Approval(auto_yes=auto_yes)
     agent = Agent(
         provider=provider,
         registry=_build_registry(settings),
         policy=Policy(mode=settings.security.mode),
-        approval=Approval(auto_yes=auto_yes),
+        approval=approval,
         audit=AuditLog(project_dir / ".pycode" / "audit.jsonl"),
         ctx=ctx,
         max_turns=max_turns if max_turns is not None else settings.agent.max_turns,
