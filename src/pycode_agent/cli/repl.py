@@ -11,6 +11,35 @@ from pycode_agent.model.streaming import (
 )
 
 
+def _make_prompt_reader(project_dir: Path, commands: list[str]):
+    """Return a callable(prompt_str) -> str for reading user input.
+
+    Uses prompt_toolkit (history + slash-command completion) when available;
+    falls back to a plain input() if prompt_toolkit can't be imported or
+    initialized (e.g. non-interactive terminals).
+    """
+    try:
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.history import FileHistory
+        from prompt_toolkit.completion import WordCompleter
+
+        hist_path = project_dir / ".pycode" / "history"
+        hist_path.parent.mkdir(parents=True, exist_ok=True)
+        session = PromptSession(
+            history=FileHistory(str(hist_path)),
+            completer=WordCompleter(commands, sentence=True),
+        )
+
+        def _read(prompt_str: str) -> str:
+            return session.prompt(prompt_str)
+
+        return _read
+    except Exception:
+        def _read(prompt_str: str) -> str:
+            return input(prompt_str)
+        return _read
+
+
 def run_repl(*, project_dir: Path, settings, provider_factory):
     # Create Console inside the function so it picks up the UTF-8
     # reconfiguration done by _fix_windows_encoding() in main.py.
@@ -24,9 +53,13 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
     slash_ctx: SlashContext | None = None
     registry = build_builtin_registry()
 
+    commands = ["/help", "/model", "/config", "/status", "/clear", "/undo",
+                "/tools", "/tokens", "/memory", "/diff", "/exit", "/quit"]
+    read_input = _make_prompt_reader(project_dir, commands)
+
     while True:
         try:
-            user = console.input("[bold cyan]You >[/] ").strip()
+            user = read_input("You > ").strip()
         except (EOFError, KeyboardInterrupt):
             console.print("\nbye")
             return
@@ -56,7 +89,10 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
                     project_dir, settings, provider_factory, console
                 )
 
-        # Normal agent interaction via streaming
+        # Normal agent interaction via streaming.
+        # Spinner only covers waiting for the FIRST event; once it arrives we
+        # drop the spinner and print immediately so the first token is not
+        # visually delayed behind the spinner.
         try:
             answer_parts: list[str] = []
 
@@ -64,14 +100,10 @@ def run_repl(*, project_dir: Path, settings, provider_factory):
                 stream_iter = agent.run_stream(user)
                 first_event = next(stream_iter)
 
-            # Process first event
             _handle_event(first_event, console, answer_parts)
-
             for event in stream_iter:
                 _handle_event(event, console, answer_parts)
 
-        except StopAsyncIteration:
-            pass
         except StopIteration:
             pass
         except SystemExit:

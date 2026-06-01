@@ -152,3 +152,51 @@ class EditFile(Tool):
             return (ctx.patch_manager or PatchManager()).preview(_resolve(ctx, args.path), args.content)
         except Exception:
             return ""
+
+
+class StrReplaceArgs(BaseModel):
+    path: str = Field(description="项目内相对路径")
+    old_string: str = Field(description="要替换的原文本,必须在文件中唯一出现")
+    new_string: str = Field(description="替换后的新文本")
+
+
+class StrReplace(Tool):
+    name = "str_replace"
+    description = "在文件中把唯一出现的 old_string 替换为 new_string(展示 diff,高风险,需确认)"
+    args_model = StrReplaceArgs
+    risk = Risk.HIGH
+
+    def _new_content(self, args: StrReplaceArgs, ctx: ToolContext) -> tuple[str | None, str | None]:
+        """Returns (new_content, error). Exactly one is non-None."""
+        p = _resolve(ctx, args.path)
+        if not p.is_file():
+            return None, f"not a file: {args.path}"
+        text = p.read_text(encoding="utf-8", errors="replace")
+        count = text.count(args.old_string)
+        if count == 0:
+            return None, f"old_string not found in {args.path}"
+        if count > 1:
+            return None, f"old_string is not unique ({count} matches) in {args.path}; add more context"
+        return text.replace(args.old_string, args.new_string, 1), None
+
+    def run(self, args: StrReplaceArgs, ctx: ToolContext) -> ToolResult:
+        if is_sensitive(args.path):
+            return ToolResult(ok=False, error="refused: sensitive file")
+        new_content, error = self._new_content(args, ctx)
+        if error is not None:
+            return ToolResult(ok=False, error=error)
+        p = _resolve(ctx, args.path)
+        ctx.patch_manager.apply(p, new_content)
+        return ToolResult(ok=True, content=f"replaced in {args.path}")
+
+    def preview(self, args: StrReplaceArgs, ctx: ToolContext) -> str:
+        from pycode_agent.utils.diff import PatchManager
+        if is_sensitive(args.path):
+            return ""
+        new_content, error = self._new_content(args, ctx)
+        if error is not None:
+            return error
+        try:
+            return (ctx.patch_manager or PatchManager()).preview(_resolve(ctx, args.path), new_content)
+        except Exception:
+            return ""

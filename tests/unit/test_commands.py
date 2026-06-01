@@ -137,3 +137,52 @@ class TestSlashCommandRegistry:
         assert "/help" in text
         assert "/exit" in text
         assert "/clear" in text
+
+    def test_tools_lists_tools(self, tmp_path):
+        from pycode_agent.cli.builder import build_agent_with_provider
+        from pycode_agent.config.settings import Settings
+        from pycode_agent.model.fake import FakeLLMProvider
+        from pycode_agent.model.base import LLMResponse
+        provider = FakeLLMProvider([LLMResponse(text="ok")])
+        agent = build_agent_with_provider(
+            provider=provider, project_dir=tmp_path, settings=Settings())
+        buf = StringIO()
+        console = Console(file=buf, force_terminal=False, no_color=True)
+        ctx = _make_ctx(tmp_path, console=console, agent=agent)
+        reg = build_builtin_registry()
+        assert reg.dispatch("/tools", ctx) is True
+        out = buf.getvalue()
+        assert "read_file" in out and "str_replace" in out
+
+    def test_tokens_shows_estimate(self, tmp_path):
+        from pycode_agent.cli.builder import build_agent_with_provider
+        from pycode_agent.config.settings import Settings
+        from pycode_agent.model.fake import FakeLLMProvider
+        from pycode_agent.model.base import LLMResponse
+        provider = FakeLLMProvider([LLMResponse(text="ok")])
+        agent = build_agent_with_provider(
+            provider=provider, project_dir=tmp_path, settings=Settings())
+        buf = StringIO()
+        console = Console(file=buf, force_terminal=False, no_color=True)
+        ctx = _make_ctx(tmp_path, console=console, agent=agent)
+        reg = build_builtin_registry()
+        assert reg.dispatch("/tokens", ctx) is True
+        assert "token" in buf.getvalue().lower()
+
+    def test_memory_shows_content(self, tmp_path):
+        (tmp_path / ".pycode").mkdir()
+        (tmp_path / ".pycode" / "memory.md").write_text("MEMO123", encoding="utf-8")
+        buf = StringIO()
+        console = Console(file=buf, force_terminal=False, no_color=True)
+        ctx = _make_ctx(tmp_path, console=console)
+        reg = build_builtin_registry()
+        assert reg.dispatch("/memory", ctx) is True
+        assert "MEMO123" in buf.getvalue()
+
+    def test_diff_no_changes(self, tmp_path):
+        buf = StringIO()
+        console = Console(file=buf, force_terminal=False, no_color=True)
+        ctx = _make_ctx(tmp_path, console=console)
+        reg = build_builtin_registry()
+        assert reg.dispatch("/diff", ctx) is True
+        assert "没有" in buf.getvalue()

@@ -143,3 +143,41 @@ def test_prompt_dry_run_sets_flag(tmp_path, monkeypatch):
     result = runner.invoke(app, ["-p", "hi", "--dry-run", "--project-dir", str(tmp_path)])
     assert result.exit_code == 0
     assert captured["agent"].dry_run is True
+
+
+def test_builder_injects_context_manager(tmp_path):
+    from pycode_agent.cli.builder import build_agent_with_provider
+    from pycode_agent.config.settings import Settings
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.model.base import LLMResponse
+
+    provider = FakeLLMProvider([LLMResponse(text="ok")])
+    agent = build_agent_with_provider(
+        provider=provider, project_dir=tmp_path, settings=Settings(),
+    )
+    assert agent.context_manager is not None
+    assert agent.context_manager.budget == 96000
+
+
+def test_builder_registers_str_replace(tmp_path):
+    from pycode_agent.cli.builder import _build_registry
+    from pycode_agent.config.settings import Settings
+    reg = _build_registry(Settings())
+    assert reg.get("str_replace") is not None
+
+
+def test_read_input_falls_back_without_prompt_toolkit(monkeypatch, tmp_path):
+    import builtins, importlib
+    from pycode_agent.cli import repl as repl_mod
+    importlib.reload(repl_mod)
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *a, **k):
+        if name.startswith("prompt_toolkit"):
+            raise ImportError("simulated")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    reader = repl_mod._make_prompt_reader(tmp_path, ["/help", "/exit"])
+    assert callable(reader)

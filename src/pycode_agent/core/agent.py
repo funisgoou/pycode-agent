@@ -1,6 +1,7 @@
 from __future__ import annotations
 from collections.abc import Iterator
 from pycode_agent.core.messages import Message, ToolCall
+from pycode_agent.core.context_manager import ContextManager
 from pycode_agent.model.base import LLMProvider
 from pycode_agent.model.streaming import (
     StreamEvent, TextDelta, ToolCallStart, ToolCallEnd, ToolResultEvent, TurnEnd,
@@ -23,7 +24,8 @@ class Agent:
     def __init__(self, *, provider: LLMProvider, registry: ToolRegistry,
                  policy: Policy, approval: Approval, audit: AuditLog,
                  ctx: ToolContext, max_turns: int = 12, max_tool_calls: int = 40,
-                 system_prefix: str = "", dry_run: bool = False):
+                 system_prefix: str = "", dry_run: bool = False,
+                 context_manager: ContextManager | None = None):
         self.provider = provider
         self.registry = registry
         self.policy = policy
@@ -34,6 +36,7 @@ class Agent:
         self.max_tool_calls = max_tool_calls
         self.system_prefix = system_prefix
         self.dry_run = dry_run
+        self.context_manager = context_manager
         self.rejections = 0
         self._project_scanned = False
         self.messages: list[Message] = [
@@ -58,10 +61,16 @@ class Agent:
                 content=SYSTEM_PROMPT + "\n\n" + prefix,
             )
 
+    def _maybe_compact(self) -> None:
+        cm = self.context_manager
+        if cm is not None and cm.should_compact(self.messages):
+            self.messages = cm.compact(self.messages, self.provider)
+
     def run(self, user_input: str) -> str:
         self.messages.append(Message(role="user", content=user_input))
         tool_call_count = 0
         for _ in range(self.max_turns):
+            self._maybe_compact()
             resp = self.provider.chat(messages=self.messages, tools=self.registry.schemas())
             if not resp.tool_calls:
                 text = resp.text or ""
@@ -134,6 +143,7 @@ class Agent:
         self.messages.append(Message(role="user", content=user_input))
         tool_call_count = 0
         for _ in range(self.max_turns):
+            self._maybe_compact()
             text_parts: list[str] = []
             completed_calls: list[ToolCall] = []
             got_turn_end = False

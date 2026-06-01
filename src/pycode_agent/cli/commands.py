@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import subprocess
 from dataclasses import dataclass, field
 from typing import Callable
@@ -152,6 +153,49 @@ def _cmd_exit(ctx: SlashContext) -> None:
     raise SystemExit(0)
 
 
+def _cmd_tools(ctx: SlashContext) -> None:
+    """列出已注册工具及风险等级"""
+    registry = ctx.agent.registry
+    for tool in registry.tools():
+        ctx.console.print(f"  {tool.name:<14} [dim]risk={tool.risk.name}[/]  {tool.description}")
+
+
+def _cmd_tokens(ctx: SlashContext) -> None:
+    """显示当前上下文估算 token 数与预算"""
+    cm = getattr(ctx.agent, "context_manager", None)
+    if cm is None:
+        ctx.console.print("[yellow]未启用上下文管理[/]")
+        return
+    est = cm.estimate_tokens(ctx.agent.messages)
+    ctx.console.print(f"  估算 tokens: {est} / 预算 {cm.budget}  (压缩阈值 {int(cm.budget * cm.ratio)})")
+
+
+def _cmd_memory(ctx: SlashContext) -> None:
+    """显示项目记忆 .pycode/memory.md"""
+    p = ctx.project_dir / ".pycode" / "memory.md"
+    if not p.is_file():
+        ctx.console.print("[dim](no project memory yet)[/]")
+        return
+    ctx.console.print(p.read_text(encoding="utf-8"))
+
+
+def _cmd_diff(ctx: SlashContext) -> None:
+    """显示最近一次文件修改的 diff"""
+    pm = ctx.agent.ctx.patch_manager
+    token = pm.peek_last() if pm is not None else None
+    if token is None:
+        ctx.console.print("[yellow]没有可显示的修改[/]")
+        return
+    # token.old_content is the pre-edit state; diff it against the file's current content.
+    current = token.path.read_text(encoding="utf-8") if token.path.is_file() else ""
+    old = token.old_content or ""
+    rendered = "".join(difflib.unified_diff(
+        old.splitlines(keepends=True), current.splitlines(keepends=True),
+        fromfile=str(token.path), tofile=str(token.path),
+    ))
+    ctx.console.print(rendered or "[dim](no textual diff)[/]")
+
+
 # ---------------------------------------------------------------------------
 # Registry builder
 # ---------------------------------------------------------------------------
@@ -167,6 +211,10 @@ def build_builtin_registry() -> SlashCommandRegistry:
         ("/status", "显示当前会话状态",   _cmd_status),
         ("/clear",  "清空对话上下文",     _cmd_clear),
         ("/undo",   "撤销最近一次文件修改", _cmd_undo),
+        ("/tools",  "列出已注册工具",     _cmd_tools),
+        ("/tokens", "显示上下文 token 估算", _cmd_tokens),
+        ("/memory", "显示项目记忆",       _cmd_memory),
+        ("/diff",   "显示最近一次修改 diff", _cmd_diff),
         ("/exit",   "退出 REPL",          _cmd_exit),
         ("/quit",   "退出 REPL",          _cmd_exit),
     ]

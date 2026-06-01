@@ -11,6 +11,9 @@ class ModelSettings(BaseModel):
     timeout: int = 120
     stream: bool = True
     max_retries: int = 3
+    context_budget: int = 96000
+    compaction_ratio: float = 0.8
+    keep_recent_turns: int = 6
 
 
 class SecuritySettings(BaseModel):

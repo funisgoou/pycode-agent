@@ -17,6 +17,9 @@ class ToolRegistry:
     def schemas(self) -> list[dict]:
         return [t.json_schema() for t in self._tools.values()]
 
+    def tools(self) -> list[Tool]:
+        return list(self._tools.values())
+
     def dispatch(self, name: str, arguments: dict, ctx: ToolContext) -> ToolResult:
         tool = self._tools.get(name)
         if tool is None:

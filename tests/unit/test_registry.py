@@ -40,3 +40,11 @@ def test_dispatch_bad_args_returns_error(tmp_path):
     ctx = ToolContext(project_dir=tmp_path)
     res = reg.dispatch("echo", {}, ctx)  # missing 'text'
     assert not res.ok and res.error
+
+def test_registry_tools_lists_registered():
+    from pycode_agent.tools.registry import ToolRegistry
+    from pycode_agent.tools.file_tools import ReadFile
+    reg = ToolRegistry()
+    reg.register(ReadFile())
+    tools = reg.tools()
+    assert any(t.name == "read_file" for t in tools)
