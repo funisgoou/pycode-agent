@@ -186,3 +186,46 @@ class TestSlashCommandRegistry:
         reg = build_builtin_registry()
         assert reg.dispatch("/diff", ctx) is True
         assert "没有" in buf.getvalue()
+
+    def test_sessions_lists(self, tmp_path):
+        from pycode_agent.core.session import SessionStore
+        from pycode_agent.core.messages import Message
+        store = SessionStore(tmp_path / ".pycode" / "sessions")
+        s = store.new_session()
+        s.messages = [Message(role="user", content="task one")]
+        s.title = "task one"
+        store.save(s)
+        buf = StringIO()
+        console = Console(file=buf, force_terminal=False, no_color=True)
+        ctx = _make_ctx(tmp_path, console=console)
+        ctx.session_store = store
+        reg = build_builtin_registry()
+        assert reg.dispatch("/sessions", ctx) is True
+        assert "task one" in buf.getvalue()
+
+    def test_resume_switches_messages(self, tmp_path):
+        from pycode_agent.core.session import SessionStore
+        from pycode_agent.core.messages import Message
+        store = SessionStore(tmp_path / ".pycode" / "sessions")
+        s = store.new_session()
+        s.messages = [Message(role="system", content="S"), Message(role="user", content="restored msg")]
+        s.title = "restored msg"
+        store.save(s)
+        buf = StringIO()
+        console = Console(file=buf, force_terminal=False, no_color=True)
+        ctx = _make_ctx(tmp_path, console=console)
+        ctx.session_store = store
+        reg = build_builtin_registry()
+        assert reg.dispatch(f"/resume {s.id}", ctx) is True
+        assert any(m.content == "restored msg" for m in ctx.agent.messages)
+
+    def test_resume_unknown_id_warns(self, tmp_path):
+        from pycode_agent.core.session import SessionStore
+        store = SessionStore(tmp_path / ".pycode" / "sessions")
+        buf = StringIO()
+        console = Console(file=buf, force_terminal=False, no_color=True)
+        ctx = _make_ctx(tmp_path, console=console)
+        ctx.session_store = store
+        reg = build_builtin_registry()
+        assert reg.dispatch("/resume nope", ctx) is True
+        assert "未找到" in buf.getvalue() or "not found" in buf.getvalue().lower()
