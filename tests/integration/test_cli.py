@@ -143,3 +143,17 @@ def test_prompt_dry_run_sets_flag(tmp_path, monkeypatch):
     result = runner.invoke(app, ["-p", "hi", "--dry-run", "--project-dir", str(tmp_path)])
     assert result.exit_code == 0
     assert captured["agent"].dry_run is True
+
+
+def test_builder_injects_context_manager(tmp_path):
+    from pycode_agent.cli.builder import build_agent_with_provider
+    from pycode_agent.config.settings import Settings
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.model.base import LLMResponse
+
+    provider = FakeLLMProvider([LLMResponse(text="ok")])
+    agent = build_agent_with_provider(
+        provider=provider, project_dir=tmp_path, settings=Settings(),
+    )
+    assert agent.context_manager is not None
+    assert agent.context_manager.budget == 96000
