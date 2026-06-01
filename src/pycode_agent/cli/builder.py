@@ -14,6 +14,7 @@ from pycode_agent.security.approval import Approval
 from pycode_agent.logs.audit import AuditLog
 from pycode_agent.utils.diff import PatchManager
 from pycode_agent.core.context_manager import ContextManager
+from pycode_agent.core.session import Session, SessionStore
 
 
 def _build_registry(settings: Settings) -> ToolRegistry:
@@ -26,9 +27,19 @@ def _build_registry(settings: Settings) -> ToolRegistry:
     return reg
 
 
+def _make_session_sink(store: SessionStore, session: Session):
+    def sink(messages):
+        session.messages = list(messages)
+        session.title = Session.make_title(messages)
+        store.save(session)
+    return sink
+
+
 def build_agent_with_provider(*, provider: LLMProvider, project_dir: Path,
                               settings: Settings, auto_yes: bool = False,
-                              dry_run: bool = False, max_turns: int | None = None) -> Agent:
+                              dry_run: bool = False, max_turns: int | None = None,
+                              session_store: SessionStore | None = None,
+                              session: Session | None = None) -> Agent:
     project_dir = Path(project_dir)
     pm = PatchManager()
     ctx = ToolContext(project_dir=project_dir, settings=settings, patch_manager=pm)
@@ -37,7 +48,14 @@ def build_agent_with_provider(*, provider: LLMProvider, project_dir: Path,
         ratio=settings.model.compaction_ratio,
         keep_recent_turns=settings.model.keep_recent_turns,
     )
-    return Agent(
+    sink = None
+    if settings.agent.persist_sessions:
+        if session_store is None:
+            session_store = SessionStore(project_dir / ".pycode" / "sessions")
+        if session is None:
+            session = session_store.new_session()
+        sink = _make_session_sink(session_store, session)
+    agent = Agent(
         provider=provider,
         registry=_build_registry(settings),
         policy=Policy(mode=settings.security.mode),
@@ -49,4 +67,8 @@ def build_agent_with_provider(*, provider: LLMProvider, project_dir: Path,
         system_prefix="",
         dry_run=dry_run,
         context_manager=cm,
+        session_sink=sink,
     )
+    if session is not None and session.messages:
+        agent.messages = list(session.messages)
+    return agent
