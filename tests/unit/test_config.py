@@ -81,3 +81,8 @@ def test_model_settings_compaction_defaults():
     assert m.context_budget == 96000
     assert m.compaction_ratio == 0.8
     assert m.keep_recent_turns == 6
+
+
+def test_agent_settings_persist_sessions_default():
+    from pycode_agent.config.settings import AgentSettings
+    assert AgentSettings().persist_sessions is True
