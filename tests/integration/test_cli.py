@@ -164,3 +164,20 @@ def test_builder_registers_str_replace(tmp_path):
     from pycode_agent.config.settings import Settings
     reg = _build_registry(Settings())
     assert reg.get("str_replace") is not None
+
+
+def test_read_input_falls_back_without_prompt_toolkit(monkeypatch, tmp_path):
+    import builtins, importlib
+    from pycode_agent.cli import repl as repl_mod
+    importlib.reload(repl_mod)
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *a, **k):
+        if name.startswith("prompt_toolkit"):
+            raise ImportError("simulated")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    reader = repl_mod._make_prompt_reader(tmp_path, ["/help", "/exit"])
+    assert callable(reader)
