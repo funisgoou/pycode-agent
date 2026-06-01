@@ -10,6 +10,7 @@ from pycode_agent.security.policy import Policy
 from pycode_agent.security.approval import Approval
 from pycode_agent.utils.diff import PatchManager
 from pycode_agent.logs.audit import AuditLog
+from pycode_agent.core.context_manager import _SUMMARY_SYSTEM as _SUMMARY_MARKER
 
 
 class EchoArgs(BaseModel):
@@ -180,3 +181,40 @@ def test_no_rejections_when_allowed(tmp_path):
     agent = _agent(tmp_path, script, tools=[EchoTool()])
     agent.run("go")
     assert agent.rejections == 0
+
+
+def test_agent_compacts_when_over_budget(tmp_path):
+    from pycode_agent.core.agent import Agent
+    from pycode_agent.core.context_manager import ContextManager
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.model.base import LLMResponse
+    from pycode_agent.core.messages import Message
+    from pycode_agent.tools.registry import ToolRegistry
+    from pycode_agent.tools.base import ToolContext
+    from pycode_agent.security.policy import Policy
+    from pycode_agent.security.approval import Approval
+    from pycode_agent.logs.audit import AuditLog
+
+    provider = FakeLLMProvider([
+        LLMResponse(text="COMPRESSED"),   # summary call
+        LLMResponse(text="final answer"), # actual turn
+    ])
+    cm = ContextManager(budget=100, ratio=0.5, keep_recent_turns=1)
+    agent = Agent(
+        provider=provider,
+        registry=ToolRegistry(),
+        policy=Policy(mode="confirm"),
+        approval=Approval(auto_yes=True),
+        audit=AuditLog(tmp_path / ".pycode" / "audit.jsonl"),
+        ctx=ToolContext(project_dir=tmp_path),
+        context_manager=cm,
+    )
+    for i in range(5):
+        agent.messages.append(Message(role="user", content="x" * 100))
+        agent.messages.append(Message(role="assistant", content="y" * 100))
+
+    out = agent.run("now answer")
+    assert out == "final answer"
+    assert provider.calls and any(
+        m.content == _SUMMARY_MARKER for m in provider.calls[0]
+    )
