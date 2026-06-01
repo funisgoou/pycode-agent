@@ -283,3 +283,71 @@ def test_resume_unknown_id_exits_1(tmp_path):
         except (ValueError, AttributeError):
             pass
     assert "not found" in combined.lower()
+
+
+def test_builder_confirm_console_highlights_diff(tmp_path):
+    from io import StringIO
+    from rich.console import Console
+    from pycode_agent.cli.builder import build_agent_with_provider
+    from pycode_agent.config.settings import Settings
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.model.base import LLMResponse
+
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=False, no_color=True, width=80)
+    provider = FakeLLMProvider([LLMResponse(text="ok")])
+    agent = build_agent_with_provider(
+        provider=provider, project_dir=tmp_path, settings=Settings(),
+        confirm_console=console)
+    agent.approval._prompt = lambda _: "n"
+    agent.approval._auto_yes = False
+    approved = agent.approval.ask("apply?", "--- a\n+++ b\n@@ -1 +1 @@\n-x\n+y\n")
+    assert approved is False
+    out = buf.getvalue()
+    assert "x" in out and "y" in out
+
+
+def test_builder_no_confirm_console_keeps_default(tmp_path):
+    from pycode_agent.cli.builder import build_agent_with_provider
+    from pycode_agent.config.settings import Settings
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.model.base import LLMResponse
+    provider = FakeLLMProvider([LLMResponse(text="ok")])
+    agent = build_agent_with_provider(
+        provider=provider, project_dir=tmp_path, settings=Settings())
+    assert agent.approval._out is print
+
+
+def test_repl_smoke_renders_response(tmp_path, monkeypatch):
+    # Drive run_repl with one user line then EOF; assert the assistant panel renders.
+    import io
+    from rich.console import Console
+    from pycode_agent.cli import repl as repl_mod
+    from pycode_agent.config.settings import Settings
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.model.base import LLMResponse
+
+    settings = Settings()
+    # provider factory returns a fake provider with one scripted answer
+    def factory(_settings):
+        return FakeLLMProvider([LLMResponse(text="hello from agent")])
+
+    # feed one line then EOF via a fake reader
+    lines = iter(["say hi"])
+    def fake_reader(project_dir, commands):
+        def _read(prompt):
+            try:
+                return next(lines)
+            except StopIteration:
+                raise EOFError
+        return _read
+    monkeypatch.setattr(repl_mod, "_make_prompt_reader", fake_reader)
+
+    buf = io.StringIO()
+    monkeypatch.setattr(repl_mod, "Console",
+                        lambda *a, **k: Console(file=buf, force_terminal=False, no_color=True, width=80))
+
+    repl_mod.run_repl(project_dir=tmp_path, settings=settings, provider_factory=factory)
+    out = buf.getvalue()
+    assert "hello from agent" in out
+    assert "assistant" in out  # panel rendered

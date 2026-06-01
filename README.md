@@ -89,4 +89,4 @@ CLI / REPL  →  Agent Loop  →  { LLMProvider, ToolRegistry, ContextScanner }
 
 ## 已知限制(垂直切片范围)
 
-切片聚焦核心主链路。已支持:LLM 摘要式上下文压缩(超预算自动触发)、str_replace 局部编辑(唯一串替换)、多级 undo、输入历史与 slash 命令补全、流式输出、多会话持久化与恢复(--continue/--resume/sessions list、REPL 内 /sessions /resume)。以下留待后续:unified-diff hunk 解析(当前为整文件替换 / 唯一串替换)、完整 TUI、MCP/LSP。
+切片聚焦核心主链路。已支持:LLM 摘要式上下文压缩(超预算自动触发)、str_replace 局部编辑(唯一串替换)、多级 undo、输入历史与 slash 命令补全、流式输出、多会话持久化与恢复(--continue/--resume/sessions list、REPL 内 /sessions /resume)、增强终端渲染(Markdown 回复面板、工具调用面板、滚动状态行、diff 语法高亮)。以下留待后续:unified-diff hunk 解析(当前为整文件替换 / 唯一串替换)、全屏 TUI(Textual)、MCP/LSP。
