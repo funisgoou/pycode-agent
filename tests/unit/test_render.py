@@ -193,6 +193,8 @@ class _FakeLive:
     instances = []
 
     def __init__(self, renderable=None, **kwargs):
+        self.initial_renderable = renderable
+        self.renderable = renderable
         self.kwargs = kwargs
         _FakeLive.instances.append(self)
 
@@ -203,7 +205,7 @@ class _FakeLive:
         pass
 
     def update(self, renderable):
-        pass
+        self.renderable = renderable
 
 
 def test_stream_renderer_live_is_transient(monkeypatch):
@@ -223,6 +225,34 @@ def test_stream_renderer_live_is_transient(monkeypatch):
 
     assert _FakeLive.instances, "Live should be used in terminal mode"
     assert _FakeLive.instances[0].kwargs.get("transient") is True
+
+
+def test_stream_renderer_shows_thinking_after_tool_result(monkeypatch):
+    """After a ToolResultEvent, a 'Thinking...' Live is started to indicate
+    the agent is waiting for the next API response."""
+    import pycode_agent.cli.render as render_mod
+
+    _FakeLive.instances = []
+    monkeypatch.setattr(render_mod, "Live", _FakeLive)
+
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=True, no_color=True, width=80)
+    StreamRenderer(console).consume(iter([
+        ToolCallStart(id="t1", name="list_dir"),
+        ToolCallEnd(id="t1", name="list_dir", arguments={}),
+        ToolResultEvent(tool_call_id="t1", ok=True, content="file.py", error=None),
+        # At this point, a "Thinking..." Live should be active.
+        # The next TextDelta replaces it with actual content.
+        TextDelta(text="here is the file"),
+        TurnEnd(text=None),
+    ]))
+
+    # Should have at least 2 Live instances: "Running list_dir..." and "Thinking..."
+    live_texts = [str(inst.initial_renderable) for inst in _FakeLive.instances if inst.initial_renderable]
+    assert any("Running list_dir" in t for t in live_texts), \
+        f"Expected 'Running list_dir' in lives: {live_texts}"
+    assert any("Thinking" in t for t in live_texts), \
+        f"Expected 'Thinking' in lives: {live_texts}"
 
 
 # ── Welcome banner ──────────────────────────────────────────────────
