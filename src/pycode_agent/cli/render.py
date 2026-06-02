@@ -155,6 +155,7 @@ class StreamRenderer:
         elif isinstance(event, ToolCallStart):
             self._finalize_text()
             self._pending_tool = event.name
+            self._show_running(event.name)
         elif isinstance(event, ToolCallEnd):
             pass
         elif isinstance(event, ToolResultEvent):
@@ -163,6 +164,7 @@ class StreamRenderer:
             summary = event.content if event.ok else (event.error or "")
             self.console.print(tool_result_panel(name, event.ok, summary))
             self._pending_tool = None
+            self._show_thinking()
         elif isinstance(event, TurnEnd):
             if self._buffer:
                 self._finalize_text()
@@ -191,6 +193,26 @@ class StreamRenderer:
         if self._live is not None:
             self._live.stop()
             self._live = None
+
+    def _show_running(self, tool_name: str) -> None:
+        """Show a brief 'Running X...' indicator while a tool executes."""
+        if not self._is_terminal():
+            return
+        self._stop_live()
+        text = Text(f"  Running {tool_name}...", style="dim")
+        self._live = Live(text, console=self.console,
+                          refresh_per_second=4, transient=True)
+        self._live.start()
+
+    def _show_thinking(self) -> None:
+        """Show a 'Thinking...' indicator while waiting for the next API response."""
+        if not self._is_terminal():
+            return
+        self._stop_live()
+        text = Text("  Thinking...", style="dim")
+        self._live = Live(text, console=self.console,
+                          refresh_per_second=4, transient=True)
+        self._live.start()
 
     def _finalize_text(self) -> None:
         if not self._buffer:
