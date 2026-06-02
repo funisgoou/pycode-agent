@@ -22,6 +22,16 @@ def status_line(agent, settings) -> Text:
     return Text("  " + "  ·  ".join(parts), style="dim")
 
 
+def status_text(agent, settings) -> str:
+    """Plain-string status for prompt_toolkit bottom_toolbar."""
+    parts = [str(agent.provider.model), str(settings.security.mode)]
+    cm = getattr(agent, "context_manager", None)
+    if cm is not None:
+        est = cm.estimate_tokens(agent.messages)
+        parts.append(f"{est // 1000}k/{cm.budget // 1000}k tokens")
+    return "  ·  ".join(parts)
+
+
 def assistant_panel(text: str) -> Panel:
     return Panel(Markdown(text), title="assistant", title_align="left",
                  border_style="cyan")

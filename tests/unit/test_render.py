@@ -5,8 +5,8 @@ from rich.syntax import Syntax
 from rich.panel import Panel
 
 from pycode_agent.cli.render import (
-    status_line, assistant_panel, tool_result_panel, diff_to_renderable,
-    _looks_like_diff,
+    status_line, status_text, assistant_panel, tool_result_panel,
+    diff_to_renderable, _looks_like_diff,
 )
 from pycode_agent.cli.render import StreamRenderer
 from pycode_agent.model.streaming import (
@@ -56,6 +56,21 @@ def test_status_line_without_context_manager_omits_tokens():
     out = _render(status_line(_FakeAgent(with_cm=False), _FakeSettings()))
     assert "opus-4-8" in out
     assert "confirm" in out
+
+
+def test_status_text_includes_model_mode_tokens():
+    s = status_text(_FakeAgent(), _FakeSettings())
+    assert isinstance(s, str)
+    assert "opus-4-8" in s
+    assert "confirm" in s
+    assert "12" in s and "96" in s
+
+
+def test_status_text_without_context_manager_omits_tokens():
+    s = status_text(_FakeAgent(with_cm=False), _FakeSettings())
+    assert "opus-4-8" in s
+    assert "confirm" in s
+    assert "token" not in s.lower()
 
 
 def test_assistant_panel_renders_markdown_text():
