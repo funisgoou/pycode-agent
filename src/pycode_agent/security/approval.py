@@ -18,7 +18,7 @@ class Approval:
         if detail:
             self._out(detail)
         try:
-            ans = self._prompt("应用? [y/N] ").strip().lower()
+            ans = self._prompt("继续? [y] 应用 / [n] 跳过 ").strip().lower()
         except (EOFError, OSError):
             return False
         return ans in ("y", "yes")

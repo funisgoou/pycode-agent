@@ -6,37 +6,63 @@ from rich.console import Console
 
 from pycode_agent.cli.builder import build_agent_with_provider
 from pycode_agent.cli.commands import SlashContext, build_builtin_registry
-from pycode_agent.cli.render import status_line, StreamRenderer
+from pycode_agent.cli.render import status_line, status_text, StreamRenderer
 from pycode_agent.core.session import SessionStore
 
 
-def _make_prompt_reader(project_dir: Path, commands: list[str]):
-    """Return a callable(prompt_str) -> str for reading user input.
+def _make_prompt_reader(project_dir: Path, commands: list[str], status_fn=None):
+    """Return (reader, has_toolbar).
 
-    Uses prompt_toolkit (history + slash-command completion) when available;
-    falls back to a plain input() if prompt_toolkit can't be imported or
-    initialized (e.g. non-interactive terminals).
+    reader is a callable(prompt_str) -> str. With prompt_toolkit available we
+    get history, slash completion, a persistent bottom toolbar (status_fn),
+    and multiline input (Enter submits, Alt+Enter inserts newline). Falls back
+    to plain input() when prompt_toolkit is unavailable.
     """
     try:
         from prompt_toolkit import PromptSession
         from prompt_toolkit.history import FileHistory
         from prompt_toolkit.completion import WordCompleter
+        from prompt_toolkit.key_binding import KeyBindings
 
         hist_path = project_dir / ".pycode" / "history"
         hist_path.parent.mkdir(parents=True, exist_ok=True)
-        session = PromptSession(
-            history=FileHistory(str(hist_path)),
-            completer=WordCompleter(commands, sentence=True),
-        )
+
+        kb = KeyBindings()
+
+        @kb.add("enter")
+        def _(event):
+            event.current_buffer.validate_and_handle()
+
+        @kb.add("escape", "enter")
+        def _(event):
+            event.current_buffer.insert_text("\n")
+
+        # Build the session lazily on first read: PromptSession() eagerly
+        # creates terminal output, which only works in a real console (it
+        # raises under pipes/tests). Deferring keeps the factory usable in
+        # non-interactive contexts while real reads get the full UI.
+        session = {"obj": None}
 
         def _read(prompt_str: str) -> str:
-            return session.prompt(prompt_str)
+            if session["obj"] is None:
+                try:
+                    session["obj"] = PromptSession(
+                        history=FileHistory(str(hist_path)),
+                        completer=WordCompleter(commands, sentence=True),
+                        bottom_toolbar=status_fn,
+                        multiline=True,
+                        key_bindings=kb,
+                    )
+                except Exception:
+                    # No usable terminal (pipe/redirect): degrade to input().
+                    return input(prompt_str)
+            return session["obj"].prompt(prompt_str)
 
-        return _read
+        return _read, True
     except Exception:
         def _read(prompt_str: str) -> str:
             return input(prompt_str)
-        return _read
+        return _read, False
 
 
 def run_repl(*, project_dir: Path, settings, provider_factory,
@@ -62,7 +88,9 @@ def run_repl(*, project_dir: Path, settings, provider_factory,
     commands = ["/help", "/model", "/config", "/status", "/clear", "/undo",
                 "/tools", "/tokens", "/memory", "/diff", "/sessions", "/resume",
                 "/exit", "/quit"]
-    read_input = _make_prompt_reader(project_dir, commands)
+    def _status_fn():
+        return status_text(agent, settings) if agent is not None else ""
+    read_input, has_toolbar = _make_prompt_reader(project_dir, commands, status_fn=_status_fn)
 
     while True:
         try:
@@ -99,7 +127,10 @@ def run_repl(*, project_dir: Path, settings, provider_factory,
                 )
 
         # Status line (scrolls with content) above the streamed response.
-        console.print(status_line(agent, settings))
+        # With a bottom toolbar the status is already persistent; only the
+        # fallback (no prompt_toolkit) needs the scrolling status line.
+        if not has_toolbar:
+            console.print(status_line(agent, settings))
 
         # Normal agent interaction via streaming.
         try:
@@ -109,6 +140,9 @@ def run_repl(*, project_dir: Path, settings, provider_factory,
             StreamRenderer(console).consume(
                 itertools.chain([first_event], stream_iter)
             )
+        except KeyboardInterrupt:
+            console.print("\n[dim][已中断][/]")
+            continue
         except StopIteration:
             pass
         except SystemExit:

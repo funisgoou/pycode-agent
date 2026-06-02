@@ -12,14 +12,24 @@ from pycode_agent.model.streaming import (
 _SUMMARY_MAX = 200
 
 
-def status_line(agent, settings) -> Text:
-    """A dim status line shown above each prompt: model · mode · tokens."""
+def _status_parts(agent, settings) -> list[str]:
+    """Shared status fields: model, mode, and tokens (if a context manager)."""
     parts = [str(agent.provider.model), str(settings.security.mode)]
     cm = getattr(agent, "context_manager", None)
     if cm is not None:
         est = cm.estimate_tokens(agent.messages)
         parts.append(f"{est // 1000}k/{cm.budget // 1000}k tokens")
-    return Text("  " + "  ·  ".join(parts), style="dim")
+    return parts
+
+
+def status_line(agent, settings) -> Text:
+    """A dim status line shown above each prompt: model · mode · tokens."""
+    return Text("  " + "  ·  ".join(_status_parts(agent, settings)), style="dim")
+
+
+def status_text(agent, settings) -> str:
+    """Plain-string status for prompt_toolkit bottom_toolbar."""
+    return "  ·  ".join(_status_parts(agent, settings))
 
 
 def assistant_panel(text: str) -> Panel:
