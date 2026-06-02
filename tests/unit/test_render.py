@@ -186,3 +186,40 @@ def test_stream_renderer_interleaved_text_tool_text():
     assert "second part" in out
     assert "read_file" in out
     assert out.index("first part") < out.index("read_file") < out.index("second part")
+
+
+class _FakeLive:
+    """Records constructor kwargs; no-op start/stop/update."""
+    instances = []
+
+    def __init__(self, renderable=None, **kwargs):
+        self.kwargs = kwargs
+        _FakeLive.instances.append(self)
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+    def update(self, renderable):
+        pass
+
+
+def test_stream_renderer_live_is_transient(monkeypatch):
+    """In terminal mode the raw-text Live must be transient, so it is cleared
+    on stop and does not duplicate the final Markdown panel."""
+    import pycode_agent.cli.render as render_mod
+
+    _FakeLive.instances = []
+    monkeypatch.setattr(render_mod, "Live", _FakeLive)
+
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=True, no_color=True, width=80)
+    StreamRenderer(console).consume(iter([
+        TextDelta(text="你好"),
+        TurnEnd(text=None),
+    ]))
+
+    assert _FakeLive.instances, "Live should be used in terminal mode"
+    assert _FakeLive.instances[0].kwargs.get("transient") is True

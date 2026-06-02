@@ -123,8 +123,11 @@ class StreamRenderer:
             return
         text = Text("".join(self._buffer))
         if self._live is None:
+            # transient=True so the raw streamed text is erased when the Live
+            # stops; _finalize_text then prints the Markdown panel in its place
+            # (otherwise the message renders twice — raw stream + panel).
             self._live = Live(text, console=self.console,
-                              refresh_per_second=12, transient=False)
+                              refresh_per_second=12, transient=True)
             self._live.start()
         else:
             self._live.update(text)
