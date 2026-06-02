@@ -29,9 +29,10 @@ def test_config_set_then_get(tmp_path):
     assert "project" in r2.stdout.lower()
 
 def test_version():
+    from pycode_agent import __version__
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.stdout
+    assert __version__ in result.stdout
 
 from pathlib import Path
 from pycode_agent.cli.builder import build_agent_with_provider
