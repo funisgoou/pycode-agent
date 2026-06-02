@@ -141,7 +141,7 @@ def run_repl(*, project_dir: Path, settings, provider_factory,
                 itertools.chain([first_event], stream_iter)
             )
         except KeyboardInterrupt:
-            console.print("[dim]\n[已中断][/]")
+            console.print("\n[dim][已中断][/]")
             continue
         except StopIteration:
             pass
