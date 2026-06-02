@@ -5,7 +5,7 @@ from rich.syntax import Syntax
 from rich.panel import Panel
 
 from pycode_agent.cli.render import (
-    status_line, status_text, welcome_banner, assistant_panel, tool_result_panel,
+    status_line, status_text, assistant_panel, tool_result_panel,
     diff_to_renderable, _looks_like_diff,
 )
 from pycode_agent.cli.render import StreamRenderer
@@ -223,40 +223,3 @@ def test_stream_renderer_live_is_transient(monkeypatch):
 
     assert _FakeLive.instances, "Live should be used in terminal mode"
     assert _FakeLive.instances[0].kwargs.get("transient") is True
-
-
-# ── Welcome banner ──────────────────────────────────────────────────
-
-from pathlib import Path
-from rich.table import Table
-
-
-def test_welcome_banner_contains_version_and_model():
-    from pycode_agent.config.settings import Settings
-    s = Settings()
-    table = welcome_banner(s, Path("/my/project"), version="1.2.3")
-    assert isinstance(table, Table)
-    out = _render(table)
-    assert "PyCodeAgent" in out
-    assert "1.2.3" in out
-    assert "my" in out and "project" in out
-
-
-def test_welcome_banner_includes_model_and_mode():
-    from pycode_agent.config.settings import Settings
-    s = Settings()
-    table = welcome_banner(s, Path("/tmp"), version="0.1.0")
-    out = _render(table)
-    # model name from default settings
-    assert s.model.name in out
-    assert s.security.mode in out
-
-
-def test_welcome_banner_without_version():
-    from pycode_agent.config.settings import Settings
-    s = Settings()
-    table = welcome_banner(s, Path("/tmp"))
-    out = _render(table)
-    assert "PyCodeAgent" in out
-    # no "v" prefix when version is empty
-    assert "v " not in out

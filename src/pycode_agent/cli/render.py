@@ -5,7 +5,6 @@ from rich.panel import Panel
 from rich.markdown import Markdown
 from rich.syntax import Syntax
 from rich.live import Live
-from rich.table import Table
 from pycode_agent.model.streaming import (
     TextDelta, ToolCallStart, ToolCallEnd, ToolResultEvent, TurnEnd,
 )
@@ -31,52 +30,6 @@ def status_line(agent, settings) -> Text:
 def status_text(agent, settings) -> str:
     """Plain-string status for prompt_toolkit bottom_toolbar."""
     return "  ·  ".join(_status_parts(agent, settings))
-
-
-# ── Welcome banner ──────────────────────────────────────────────────
-# Two-column layout: pixel-art logo (left) + project info (right),
-# matching the Claude Code style the user showed.
-
-_LOGO_LINES: list[str] = [
-    "  ██▓███ ▓██   ██▓ ██░ ██",
-    "▓██░  ██▒▒██  ██▒▓██░ ██▒",
-    "▓██░ ██▓▒ ▒██▄█░▒▒██▄██▒",
-    "▒██▄█▓▒ ▒ ▒██▒ ░ ░██▒█░",
-]
-
-
-def welcome_banner(settings, project_dir, *, version: str = "",
-                   resumed_session=None) -> Table:
-    """Return a Rich Table: pixel logo (left) + info (right)."""
-    # ── info lines ──
-    model = str(settings.model.name)
-    mode = str(settings.security.mode)
-    cwd = str(project_dir)
-
-    line1 = Text()
-    line1.append("PyCodeAgent", style="bold cyan")
-    if version:
-        line1.append(f"  v{version}", style="dim")
-
-    line2 = Text(f"{model} · {mode}", style="dim")
-    line3 = Text(cwd, style="dim")
-
-    lines = [line1, line2, line3]
-
-    # ── table (no borders / padding) ──
-    table = Table(
-        box=None, show_header=False, show_edge=False,
-        padding=(0, 0), pad_edge=False,
-    )
-    table.add_column(min_width=27, no_wrap=True)  # logo
-    table.add_column(no_wrap=False)                # info
-
-    for i in range(max(len(_LOGO_LINES), len(lines))):
-        logo_cell = Text(_LOGO_LINES[i], style="bold yellow") if i < len(_LOGO_LINES) else Text("")
-        info_cell = lines[i] if i < len(lines) else Text("")
-        table.add_row(logo_cell, info_cell)
-
-    return table
 
 
 def assistant_panel(text: str) -> Panel:

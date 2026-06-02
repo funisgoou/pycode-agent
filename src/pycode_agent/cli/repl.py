@@ -6,8 +6,7 @@ from rich.console import Console
 
 from pycode_agent.cli.builder import build_agent_with_provider
 from pycode_agent.cli.commands import SlashContext, build_builtin_registry
-from pycode_agent.cli.render import status_line, status_text, welcome_banner, StreamRenderer
-from pycode_agent import __version__
+from pycode_agent.cli.render import status_line, status_text, StreamRenderer
 from pycode_agent.core.session import SessionStore
 
 
@@ -75,8 +74,7 @@ def run_repl(*, project_dir: Path, settings, provider_factory,
     if session_store is None:
         session_store = SessionStore(project_dir / ".pycode" / "sessions")
 
-    console.print(welcome_banner(settings, project_dir, version=__version__))
-    console.print()  # blank line after banner
+    console.print("[bold green]PyCodeAgent[/] - 输入 /help 查看可用命令, /exit 退出")
 
     if resumed_session is not None:
         console.print(f"[dim]已恢复会话 {resumed_session.id}({len(resumed_session.messages)} 条消息)[/]")
