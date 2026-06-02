@@ -1,6 +1,8 @@
 from __future__ import annotations
+from pathlib import Path
 from typing import Callable
 from rich.text import Text
+from rich.table import Table
 from rich.panel import Panel
 from rich.markdown import Markdown
 from rich.syntax import Syntax
@@ -30,6 +32,59 @@ def status_line(agent, settings) -> Text:
 def status_text(agent, settings) -> str:
     """Plain-string status for prompt_toolkit bottom_toolbar."""
     return "  ·  ".join(_status_parts(agent, settings))
+
+
+# ── Welcome banner ──────────────────────────────────────────────────
+# Mini terminal icon (left) + project info (right).
+
+_ICON = [
+    " ┌───────────┐ ",
+    " │ $ python  │ ",
+    " │ > import  │ ",
+    " │ ✓ ready _ │ ",
+    " └───────────┘ ",
+]
+
+
+def welcome_banner(settings, project_dir: Path, *, version: str = "") -> Table:
+    """Two-column welcome banner: mini terminal icon + info."""
+    model = str(settings.model.name)
+    mode = str(settings.security.mode)
+    cwd = str(project_dir)
+
+    # ── right-hand info lines ──
+    title = Text()
+    title.append("Py", style="bold bright_magenta")
+    title.append("Code", style="bold bright_cyan")
+    title.append(" Agent", style="bold white")
+    if version:
+        title.append(f"  v{version}", style="bright_black")
+
+    divider = Text("─" * 32, style="dim cyan")
+
+    info_mm = Text()
+    info_mm.append("> ", style="bold bright_green")
+    info_mm.append(model, style="white")
+    info_mm.append("  ·  ", style="dim")
+    info_mm.append(mode, style="white")
+
+    info_cwd = Text()
+    info_cwd.append("> ", style="bold bright_green")
+    info_cwd.append(cwd, style="dim")
+
+    # ── two-column table ──
+    table = Table(box=None, show_header=False, show_edge=False,
+                  padding=(0, 2), pad_edge=False)
+    table.add_column(min_width=15)   # icon
+    table.add_column()               # info
+
+    table.add_row(Text(_ICON[0], style="bright_cyan"),    title)
+    table.add_row(Text(_ICON[1], style="bright_green"),   divider)
+    table.add_row(Text(_ICON[2], style="bright_green"),   info_mm)
+    table.add_row(Text(_ICON[3], style="bright_yellow"),  info_cwd)
+    table.add_row(Text(_ICON[4], style="bright_cyan"),    Text())
+
+    return table
 
 
 def assistant_panel(text: str) -> Panel:
