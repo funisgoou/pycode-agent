@@ -374,3 +374,46 @@ def test_make_prompt_reader_fallback_without_prompt_toolkit(monkeypatch, tmp_pat
     reader, has_toolbar = _make_prompt_reader(tmp_path, ["/help"], status_fn=lambda: "X")
     assert callable(reader)
     assert has_toolbar is False
+
+
+def test_repl_interrupt_during_stream(tmp_path, monkeypatch):
+    import io
+    from rich.console import Console
+    from pycode_agent.cli import repl as repl_mod
+    from pycode_agent.config.settings import Settings
+
+    class _InterruptingAgent:
+        # minimal stand-in: run_stream raises KeyboardInterrupt mid-turn
+        def __init__(self):
+            self.messages = []
+            self.context_manager = None
+            class _P: model = "fake"
+            self.provider = _P()
+        def run_stream(self, user):
+            raise KeyboardInterrupt()
+
+    def fake_init_agent(project_dir, settings, provider_factory, console,
+                        session_store=None, resumed_session=None):
+        agent = _InterruptingAgent()
+        return agent, None
+    monkeypatch.setattr(repl_mod, "_init_agent", fake_init_agent)
+
+    lines = iter(["do something"])
+    def fake_reader(project_dir, commands, status_fn=None):
+        def _read(prompt):
+            try:
+                return next(lines)
+            except StopIteration:
+                raise EOFError
+        return _read, False
+    monkeypatch.setattr(repl_mod, "_make_prompt_reader", fake_reader)
+
+    buf = io.StringIO()
+    monkeypatch.setattr(repl_mod, "Console",
+                        lambda *a, **k: Console(file=buf, force_terminal=False, no_color=True, width=80))
+
+    # must not raise; must print interrupt notice
+    repl_mod.run_repl(project_dir=tmp_path, settings=Settings(),
+                      provider_factory=lambda s: None)
+    out = buf.getvalue()
+    assert "已中断" in out

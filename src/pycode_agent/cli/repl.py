@@ -140,6 +140,9 @@ def run_repl(*, project_dir: Path, settings, provider_factory,
             StreamRenderer(console).consume(
                 itertools.chain([first_event], stream_iter)
             )
+        except KeyboardInterrupt:
+            console.print("[dim]\n[已中断][/]")
+            continue
         except StopIteration:
             pass
         except SystemExit:
