@@ -1,20 +1,34 @@
 from __future__ import annotations
+
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable
-from rich.text import Text
-from rich.table import Table
-from rich.panel import Panel
-from rich.markdown import Markdown
-from rich.syntax import Syntax
+from typing import TYPE_CHECKING
+
+from rich.console import Console
 from rich.live import Live
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.table import Table
+from rich.text import Text
+
 from pycode_agent.model.streaming import (
-    TextDelta, ToolCallStart, ToolCallEnd, ToolResultEvent, TurnEnd,
+    StreamEvent,
+    TextDelta,
+    ToolCallEnd,
+    ToolCallStart,
+    ToolResultEvent,
+    TurnEnd,
 )
+
+if TYPE_CHECKING:
+    from pycode_agent.config.settings import Settings
+    from pycode_agent.core.agent import Agent
 
 _SUMMARY_MAX = 200
 
 
-def _status_parts(agent, settings) -> list[str]:
+def _status_parts(agent: Agent, settings: Settings) -> list[str]:
     """Shared status fields: model, mode, and tokens (if a context manager)."""
     parts = [str(agent.provider.model), str(settings.security.mode)]
     cm = getattr(agent, "context_manager", None)
@@ -24,12 +38,12 @@ def _status_parts(agent, settings) -> list[str]:
     return parts
 
 
-def status_line(agent, settings) -> Text:
+def status_line(agent: Agent, settings: Settings) -> Text:
     """A dim status line shown above each prompt: model · mode · tokens."""
     return Text("  " + "  ·  ".join(_status_parts(agent, settings)), style="dim")
 
 
-def status_text(agent, settings) -> str:
+def status_text(agent: Agent, settings: Settings) -> str:
     """Plain-string status for prompt_toolkit bottom_toolbar."""
     return "  ·  ".join(_status_parts(agent, settings))
 
@@ -46,7 +60,7 @@ _ICON = [
 ]
 
 
-def welcome_banner(settings, project_dir: Path, *, version: str = "") -> Table:
+def welcome_banner(settings: Settings, project_dir: Path, *, version: str = "") -> Table:
     """Two-column welcome banner: mini terminal icon + info."""
     model = str(settings.model.name)
     mode = str(settings.security.mode)
@@ -114,7 +128,7 @@ def _looks_like_diff(text: str) -> bool:
     return has_plus and has_minus
 
 
-def make_confirm_printer(console) -> Callable[[str], None]:
+def make_confirm_printer(console: Console) -> Callable[[str], None]:
     """Return an out_fn(detail) that syntax-highlights diff-like detail."""
     def out_fn(detail: str) -> None:
         if isinstance(detail, str) and _looks_like_diff(detail):
@@ -133,14 +147,14 @@ class StreamRenderer:
     control codes, so output is assertable.
     """
 
-    def __init__(self, console):
+    def __init__(self, console: Console):
         self.console = console
         self._buffer: list[str] = []
-        self._live = None
+        self._live: Live | None = None
         self._pending_tool: str | None = None
         self.final_text = ""
 
-    def consume(self, events) -> str:
+    def consume(self, events: Iterable[StreamEvent]) -> str:
         try:
             for event in events:
                 self._handle(event)

@@ -1,17 +1,29 @@
 from __future__ import annotations
-from collections.abc import Iterator
-from typing import Callable
+
+import logging
+from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING
+
 from pycode_agent.core.messages import Message, ToolCall
+
+if TYPE_CHECKING:
+    from pycode_agent.core.messages import ToolResult
 from pycode_agent.core.context_manager import ContextManager
+from pycode_agent.logs.audit import AuditLog
 from pycode_agent.model.base import LLMProvider
 from pycode_agent.model.streaming import (
-    StreamEvent, TextDelta, ToolCallStart, ToolCallEnd, ToolResultEvent, TurnEnd,
+    StreamEvent,
+    TextDelta,
+    ToolCallEnd,
+    ToolResultEvent,
+    TurnEnd,
 )
-from pycode_agent.tools.registry import ToolRegistry
-from pycode_agent.tools.base import ToolContext
-from pycode_agent.security.policy import Policy, Decision
 from pycode_agent.security.approval import Approval
-from pycode_agent.logs.audit import AuditLog
+from pycode_agent.security.policy import Decision, Policy
+from pycode_agent.tools.base import ToolContext
+from pycode_agent.tools.registry import ToolRegistry
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "You are PyCodeAgent, a terminal coding assistant. "
@@ -22,6 +34,15 @@ SYSTEM_PROMPT = (
 
 
 class Agent:
+    """Drives the LLM tool-use loop.
+
+    Each ``run``/``run_stream`` call appends the user turn, then repeatedly
+    asks the provider for the next step: plain text terminates the loop, while
+    tool calls are gated through the :class:`Policy`/:class:`Approval` layer,
+    dispatched, and fed back as tool messages. Bounded by ``max_turns`` and
+    ``max_tool_calls``; optionally compacts context and persists the session.
+    """
+
     def __init__(self, *, provider: LLMProvider, registry: ToolRegistry,
                  policy: Policy, approval: Approval, audit: AuditLog,
                  ctx: ToolContext, max_turns: int = 12, max_tool_calls: int = 40,
@@ -75,9 +96,11 @@ class Agent:
         try:
             self.session_sink(self.messages)
         except Exception:
-            pass  # persistence must never break the agent loop
+            # persistence must never break the agent loop
+            logger.warning("session persistence failed", exc_info=True)
 
     def run(self, user_input: str) -> str:
+        """Run the loop to completion and return the assistant's final text."""
         self.messages.append(Message(role="user", content=user_input))
         tool_call_count = 0
         for _ in range(self.max_turns):
@@ -100,7 +123,7 @@ class Agent:
             self._persist()
         return "Stopped: reached max turns without a final answer."
 
-    def _handle_call(self, call):
+    def _handle_call(self, call: ToolCall):
         # First tool call ever → lazily scan project and enrich system prompt.
         self._ensure_project_profile()
         tool = self.registry.get(call.name)
@@ -123,7 +146,7 @@ class Agent:
                 if preview:
                     detail = preview
             except Exception:
-                pass
+                logger.debug("tool preview failed for %s", call.name, exc_info=True)
             if self.dry_run:
                 from pycode_agent.core.messages import ToolResult
                 res = ToolResult(ok=True, content=f"[dry-run] would run {call.name}; not executed.\n{preview}".rstrip())
@@ -142,7 +165,7 @@ class Agent:
         return res
 
     @staticmethod
-    def _render(result) -> str:
+    def _render(result: ToolResult) -> str:
         if result.ok:
             return result.content
         return f"ERROR: {result.error}"

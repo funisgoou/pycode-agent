@@ -1,10 +1,17 @@
 from __future__ import annotations
-import subprocess
+
+import logging
 from pathlib import Path
+
 from pydantic import BaseModel, Field
+
 from pycode_agent.core.messages import ToolResult
 from pycode_agent.security.paths import is_sensitive
-from .base import Tool, Risk, ToolContext
+from pycode_agent.utils.proc import run_command
+
+from .base import Risk, Tool, ToolContext
+
+logger = logging.getLogger(__name__)
 
 MAX_READ_BYTES = 200_000
 
@@ -21,11 +28,26 @@ def _resolve(ctx: ToolContext, rel: str) -> Path:
     return target
 
 
+def _patch_manager(ctx: ToolContext):
+    """Return the context's PatchManager, or a fresh default if none was set."""
+    from pycode_agent.utils.diff import PatchManager
+    return ctx.patch_manager or PatchManager()
+
+
+def _preview_write(ctx: ToolContext, path: str, content: str) -> str:
+    """Shared diff-preview used by the full-file write/edit tools."""
+    try:
+        return _patch_manager(ctx).preview(_resolve(ctx, path), content)
+    except Exception:
+        logger.debug("write preview failed for %s", path, exc_info=True)
+        return ""
+
+
 class ReadArgs(BaseModel):
     path: str = Field(description="项目内相对路径")
 
 
-class ReadFile(Tool):
+class ReadFile(Tool[ReadArgs]):
     name = "read_file"
     description = "读取文本文件内容(相对项目根目录)"
     args_model = ReadArgs
@@ -45,7 +67,7 @@ class ListArgs(BaseModel):
     path: str = "."
 
 
-class ListDir(Tool):
+class ListDir(Tool[ListArgs]):
     name = "list_dir"
     description = "列出目录下的文件与子目录"
     args_model = ListArgs
@@ -64,7 +86,7 @@ class SearchArgs(BaseModel):
     path: str = "."
 
 
-class SearchText(Tool):
+class SearchText(Tool[SearchArgs]):
     name = "search_text"
     description = "在项目中搜索文本(优先 ripgrep,回退 Python)"
     args_model = SearchArgs
@@ -72,16 +94,13 @@ class SearchText(Tool):
 
     def run(self, args: SearchArgs, ctx: ToolContext) -> ToolResult:
         base = _resolve(ctx, args.path)
-        try:
-            out = subprocess.run(
-                ["rg", "-n", "--no-heading", args.query, str(base)],
-                capture_output=True, text=True, timeout=30,
-            )
-            if out.returncode in (0, 1):
-                return ToolResult(ok=True, content=out.stdout[:MAX_READ_BYTES] or "(no matches)")
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-        # Python fallback
+        out = run_command(
+            ["rg", "-n", "--no-heading", args.query, str(base)], timeout=30,
+        )
+        # rg exits 0 (matches) or 1 (no matches); both are successful searches.
+        if out.error is None and out.returncode in (0, 1):
+            return ToolResult(ok=True, content=out.stdout[:MAX_READ_BYTES] or "(no matches)")
+        # Python fallback (rg missing, timed out, or errored)
         hits: list[str] = []
         for f in base.rglob("*"):
             if not f.is_file() or is_sensitive(str(f)):
@@ -100,7 +119,7 @@ class WriteArgs(BaseModel):
     content: str
 
 
-class WriteFile(Tool):
+class WriteFile(Tool[WriteArgs]):
     name = "write_file"
     description = "写入或覆盖文件(高风险,需确认)"
     args_model = WriteArgs
@@ -110,16 +129,11 @@ class WriteFile(Tool):
         if is_sensitive(args.path):
             return ToolResult(ok=False, error="refused: sensitive file")
         p = _resolve(ctx, args.path)
-        pm = ctx.patch_manager
-        pm.apply(p, args.content)
+        _patch_manager(ctx).apply(p, args.content)
         return ToolResult(ok=True, content=f"wrote {args.path}")
 
     def preview(self, args: WriteArgs, ctx: ToolContext) -> str:
-        from pycode_agent.utils.diff import PatchManager
-        try:
-            return (ctx.patch_manager or PatchManager()).preview(_resolve(ctx, args.path), args.content)
-        except Exception:
-            return ""
+        return _preview_write(ctx, args.path, args.content)
 
 
 class EditArgs(BaseModel):
@@ -128,7 +142,7 @@ class EditArgs(BaseModel):
     expected_old: str | None = Field(default=None, description="期望的旧内容,用于冲突检测")
 
 
-class EditFile(Tool):
+class EditFile(Tool[EditArgs]):
     name = "edit_file"
     description = "用新内容替换文件(展示 diff,高风险,需确认)"
     args_model = EditArgs
@@ -139,19 +153,14 @@ class EditFile(Tool):
             return ToolResult(ok=False, error="refused: sensitive file")
         from pycode_agent.utils.diff import ConflictError
         p = _resolve(ctx, args.path)
-        pm = ctx.patch_manager
         try:
-            pm.apply(p, args.content, expected_old=args.expected_old)
+            _patch_manager(ctx).apply(p, args.content, expected_old=args.expected_old)
         except ConflictError as e:
             return ToolResult(ok=False, error=str(e))
         return ToolResult(ok=True, content=f"edited {args.path}")
 
     def preview(self, args: EditArgs, ctx: ToolContext) -> str:
-        from pycode_agent.utils.diff import PatchManager
-        try:
-            return (ctx.patch_manager or PatchManager()).preview(_resolve(ctx, args.path), args.content)
-        except Exception:
-            return ""
+        return _preview_write(ctx, args.path, args.content)
 
 
 class StrReplaceArgs(BaseModel):
@@ -160,7 +169,7 @@ class StrReplaceArgs(BaseModel):
     new_string: str = Field(description="替换后的新文本")
 
 
-class StrReplace(Tool):
+class StrReplace(Tool[StrReplaceArgs]):
     name = "str_replace"
     description = "在文件中把唯一出现的 old_string 替换为 new_string(展示 diff,高风险,需确认)"
     args_model = StrReplaceArgs
@@ -183,20 +192,16 @@ class StrReplace(Tool):
         if is_sensitive(args.path):
             return ToolResult(ok=False, error="refused: sensitive file")
         new_content, error = self._new_content(args, ctx)
-        if error is not None:
+        if new_content is None:
             return ToolResult(ok=False, error=error)
         p = _resolve(ctx, args.path)
-        ctx.patch_manager.apply(p, new_content)
+        _patch_manager(ctx).apply(p, new_content)
         return ToolResult(ok=True, content=f"replaced in {args.path}")
 
     def preview(self, args: StrReplaceArgs, ctx: ToolContext) -> str:
-        from pycode_agent.utils.diff import PatchManager
         if is_sensitive(args.path):
             return ""
         new_content, error = self._new_content(args, ctx)
-        if error is not None:
-            return error
-        try:
-            return (ctx.patch_manager or PatchManager()).preview(_resolve(ctx, args.path), new_content)
-        except Exception:
-            return ""
+        if new_content is None:
+            return error or ""
+        return _preview_write(ctx, args.path, new_content)

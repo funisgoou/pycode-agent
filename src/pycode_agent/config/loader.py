@@ -1,14 +1,19 @@
 from __future__ import annotations
+
 import os
 import tomllib
 from pathlib import Path
+
+from pydantic import BaseModel
+
 from .settings import Settings
 
-
 # Known config sections -> their pydantic model, used to validate dotted keys.
-_SECTION_MODELS = {
-    name: field.annotation
+# Every top-level Settings field is itself a BaseModel section.
+_SECTION_MODELS: dict[str, type[BaseModel]] = {
+    name: ann
     for name, field in Settings.model_fields.items()
+    if isinstance((ann := field.annotation), type) and issubclass(ann, BaseModel)
 }
 
 
@@ -111,6 +116,8 @@ def _coerce(model_field, raw: str):
         return raw.strip().lower() in ("1", "true", "yes", "on")
     if ann is int or ann == (int | None):
         return int(raw)
+    if ann is float or ann == (float | None):
+        return float(raw)
     return raw
 
 
@@ -148,6 +155,6 @@ def _dump_toml(data: dict) -> str:
 def _toml_value(value) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return str(value)
     return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'

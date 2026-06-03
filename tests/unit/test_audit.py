@@ -1,5 +1,7 @@
 import json
+
 from pycode_agent.logs.audit import AuditLog
+
 
 def test_record_writes_jsonl(tmp_path):
     log_path = tmp_path / "audit.jsonl"

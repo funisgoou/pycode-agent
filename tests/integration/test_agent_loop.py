@@ -1,16 +1,18 @@
 from pathlib import Path
+
 from pydantic import BaseModel
+
 from pycode_agent.core.agent import Agent
-from pycode_agent.core.messages import ToolCall, ToolResult
-from pycode_agent.model.fake import FakeLLMProvider
-from pycode_agent.model.base import LLMResponse
-from pycode_agent.tools.base import Tool, Risk, ToolContext
-from pycode_agent.tools.registry import ToolRegistry
-from pycode_agent.security.policy import Policy
-from pycode_agent.security.approval import Approval
-from pycode_agent.utils.diff import PatchManager
-from pycode_agent.logs.audit import AuditLog
 from pycode_agent.core.context_manager import _SUMMARY_SYSTEM as _SUMMARY_MARKER
+from pycode_agent.core.messages import ToolCall, ToolResult
+from pycode_agent.logs.audit import AuditLog
+from pycode_agent.model.base import LLMResponse
+from pycode_agent.model.fake import FakeLLMProvider
+from pycode_agent.security.approval import Approval
+from pycode_agent.security.policy import Policy
+from pycode_agent.tools.base import Risk, Tool, ToolContext
+from pycode_agent.tools.registry import ToolRegistry
+from pycode_agent.utils.diff import PatchManager
 
 
 class EchoArgs(BaseModel):
@@ -104,12 +106,12 @@ def test_audit_written(tmp_path):
 
 
 def test_confirm_shows_diff_for_write(tmp_path):
+    from pycode_agent.logs.audit import AuditLog
+    from pycode_agent.security.approval import Approval
+    from pycode_agent.security.policy import Policy
+    from pycode_agent.tools.base import ToolContext
     from pycode_agent.tools.file_tools import WriteFile
     from pycode_agent.tools.registry import ToolRegistry
-    from pycode_agent.tools.base import ToolContext
-    from pycode_agent.security.policy import Policy
-    from pycode_agent.security.approval import Approval
-    from pycode_agent.logs.audit import AuditLog
     from pycode_agent.utils.diff import PatchManager
 
     (tmp_path / "f.txt").write_text("old line\n", encoding="utf-8")
@@ -186,14 +188,14 @@ def test_no_rejections_when_allowed(tmp_path):
 def test_agent_compacts_when_over_budget(tmp_path):
     from pycode_agent.core.agent import Agent
     from pycode_agent.core.context_manager import ContextManager
-    from pycode_agent.model.fake import FakeLLMProvider
-    from pycode_agent.model.base import LLMResponse
     from pycode_agent.core.messages import Message
-    from pycode_agent.tools.registry import ToolRegistry
-    from pycode_agent.tools.base import ToolContext
-    from pycode_agent.security.policy import Policy
-    from pycode_agent.security.approval import Approval
     from pycode_agent.logs.audit import AuditLog
+    from pycode_agent.model.base import LLMResponse
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.security.approval import Approval
+    from pycode_agent.security.policy import Policy
+    from pycode_agent.tools.base import ToolContext
+    from pycode_agent.tools.registry import ToolRegistry
 
     provider = FakeLLMProvider([
         LLMResponse(text="COMPRESSED"),   # summary call
@@ -222,13 +224,13 @@ def test_agent_compacts_when_over_budget(tmp_path):
 
 def test_agent_session_sink_called_each_turn(tmp_path):
     from pycode_agent.core.agent import Agent
-    from pycode_agent.model.fake import FakeLLMProvider
-    from pycode_agent.model.base import LLMResponse
-    from pycode_agent.tools.registry import ToolRegistry
-    from pycode_agent.tools.base import ToolContext
-    from pycode_agent.security.policy import Policy
-    from pycode_agent.security.approval import Approval
     from pycode_agent.logs.audit import AuditLog
+    from pycode_agent.model.base import LLMResponse
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.security.approval import Approval
+    from pycode_agent.security.policy import Policy
+    from pycode_agent.tools.base import ToolContext
+    from pycode_agent.tools.registry import ToolRegistry
 
     snapshots = []
     provider = FakeLLMProvider([LLMResponse(text="hello")])
@@ -249,13 +251,13 @@ def test_agent_session_sink_called_each_turn(tmp_path):
 
 def test_agent_session_sink_errors_do_not_crash(tmp_path):
     from pycode_agent.core.agent import Agent
-    from pycode_agent.model.fake import FakeLLMProvider
-    from pycode_agent.model.base import LLMResponse
-    from pycode_agent.tools.registry import ToolRegistry
-    from pycode_agent.tools.base import ToolContext
-    from pycode_agent.security.policy import Policy
-    from pycode_agent.security.approval import Approval
     from pycode_agent.logs.audit import AuditLog
+    from pycode_agent.model.base import LLMResponse
+    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.security.approval import Approval
+    from pycode_agent.security.policy import Policy
+    from pycode_agent.tools.base import ToolContext
+    from pycode_agent.tools.registry import ToolRegistry
 
     def boom(msgs):
         raise RuntimeError("disk full")

@@ -1,14 +1,52 @@
 import json
+
 import httpx
+import pytest
+
 from pycode_agent.core.messages import Message
+from pycode_agent.model.errors import AuthError, NetworkError, ProviderError, RateLimitError
 from pycode_agent.model.openai_compatible import OpenAICompatibleProvider
-from pycode_agent.model.errors import AuthError, RateLimitError, NetworkError
+
 
 def _provider(handler, **kwargs):
     transport = httpx.MockTransport(handler)
     client = httpx.Client(transport=transport, base_url="https://api.test/v1")
     kwargs.setdefault("sleep_fn", lambda s: None)  # no real sleeping in tests
     return OpenAICompatibleProvider(model="m", api_key="k", client=client, **kwargs)
+
+def test_empty_choices_raises_provider_error():
+    def handler(req):
+        return httpx.Response(200, json={"choices": []})
+    p = _provider(handler)
+    with pytest.raises(ProviderError):
+        p.chat(messages=[Message(role="user", content="hi")], tools=[])
+
+def test_missing_message_key_raises_provider_error():
+    def handler(req):
+        return httpx.Response(200, json={"choices": [{"no_message": 1}]})
+    p = _provider(handler)
+    with pytest.raises(ProviderError):
+        p.chat(messages=[Message(role="user", content="hi")], tools=[])
+
+def test_non_json_body_raises_provider_error():
+    def handler(req):
+        return httpx.Response(200, text="not json at all")
+    p = _provider(handler)
+    with pytest.raises(ProviderError):
+        p.chat(messages=[Message(role="user", content="hi")], tools=[])
+
+def test_assistant_tool_call_message_omits_null_content():
+    from pycode_agent.core.messages import ToolCall
+    from pycode_agent.model.openai_compatible import _message_to_dict
+    m = Message(role="assistant", tool_calls=[ToolCall(id="c1", name="t", arguments={})])
+    d = _message_to_dict(m)
+    assert "content" not in d  # null content omitted when tool_calls present
+    assert d["tool_calls"][0]["id"] == "c1"
+
+def test_plain_message_keeps_content():
+    from pycode_agent.model.openai_compatible import _message_to_dict
+    d = _message_to_dict(Message(role="user", content="hi"))
+    assert d["content"] == "hi"
 
 def test_parses_text_response():
     def handler(req):

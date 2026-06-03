@@ -1,7 +1,12 @@
 from __future__ import annotations
+
 import json
+import logging
+
 from pycode_agent.core.messages import Message
 from pycode_agent.model.base import LLMProvider
+
+logger = logging.getLogger(__name__)
 
 _SUMMARY_SYSTEM = (
     "You are compressing an earlier portion of a coding-assistant conversation. "
@@ -84,5 +89,5 @@ class ContextManager:
                 ))
         except Exception:
             # Fall back to plain truncation: drop old messages entirely.
-            pass
+            logger.warning("context compaction summary failed; truncating", exc_info=True)
         return head + recent

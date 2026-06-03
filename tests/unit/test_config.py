@@ -1,7 +1,11 @@
 from pycode_agent.config.loader import (
-    merge_config, get_setting, set_project_setting, load_settings,
+    get_setting,
+    load_settings,
+    merge_config,
+    set_project_setting,
 )
 from pycode_agent.config.settings import Settings
+
 
 def test_cli_overrides_env():
     s = merge_config(
@@ -73,6 +77,13 @@ def test_set_project_setting_coerces_types(tmp_path):
     s = load_settings(tmp_path)
     assert s.agent.max_turns == 5
     assert s.security.allow_shell is False
+
+
+def test_set_project_setting_coerces_float(tmp_path):
+    coerced = set_project_setting(tmp_path, "model.compaction_ratio", "0.5")
+    assert coerced == 0.5 and isinstance(coerced, float)
+    s = load_settings(tmp_path)
+    assert s.model.compaction_ratio == 0.5
 
 
 def test_model_settings_compaction_defaults():

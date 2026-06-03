@@ -1,17 +1,15 @@
 from __future__ import annotations
-from pathlib import Path
+
 from pydantic import BaseModel
+
 from pycode_agent.core.messages import ToolResult
-from .base import Tool, Risk, ToolContext
+
+from .base import NoArgs, Risk, Tool, ToolContext
 
 MEMORY_REL = ".pycode/memory.md"
 
 
-class NoArgs(BaseModel):
-    pass
-
-
-class MemoryRead(Tool):
+class MemoryRead(Tool[NoArgs]):
     name = "memory_read"
     description = "读取项目记忆 .pycode/memory.md"
     args_model = NoArgs
@@ -28,7 +26,7 @@ class WriteArgs(BaseModel):
     content: str
 
 
-class MemoryWrite(Tool):
+class MemoryWrite(Tool[WriteArgs]):
     name = "memory_write"
     description = "写入项目记忆(高风险,需确认)"
     args_model = WriteArgs

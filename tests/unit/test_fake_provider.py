@@ -1,6 +1,7 @@
 from pycode_agent.core.messages import Message, ToolCall
-from pycode_agent.model.fake import FakeLLMProvider
 from pycode_agent.model.base import LLMResponse
+from pycode_agent.model.fake import FakeLLMProvider
+
 
 def test_fake_returns_scripted_text():
     p = FakeLLMProvider(script=[LLMResponse(text="hello")])

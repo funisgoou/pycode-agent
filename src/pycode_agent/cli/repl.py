@@ -1,17 +1,27 @@
 from __future__ import annotations
 
 import itertools
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
+
 from rich.console import Console
 
+from pycode_agent import __version__
 from pycode_agent.cli.builder import build_agent_with_provider
 from pycode_agent.cli.commands import SlashContext, build_builtin_registry
-from pycode_agent.cli.render import status_line, status_text, welcome_banner, StreamRenderer
-from pycode_agent import __version__
-from pycode_agent.core.session import SessionStore
+from pycode_agent.cli.render import StreamRenderer, status_line, status_text, welcome_banner
+from pycode_agent.config.settings import Settings
+from pycode_agent.core.agent import Agent
+from pycode_agent.core.session import Session, SessionStore
+from pycode_agent.model.base import LLMProvider
 
 
-def _make_prompt_reader(project_dir: Path, commands: list[str], status_fn=None):
+def _make_prompt_reader(
+    project_dir: Path,
+    commands: list[str],
+    status_fn: Callable[[], str] | None = None,
+) -> tuple[Callable[[str], str], bool]:
     """Return (reader, has_toolbar).
 
     reader is a callable(prompt_str) -> str. With prompt_toolkit available we
@@ -21,8 +31,8 @@ def _make_prompt_reader(project_dir: Path, commands: list[str], status_fn=None):
     """
     try:
         from prompt_toolkit import PromptSession
-        from prompt_toolkit.history import FileHistory
         from prompt_toolkit.completion import WordCompleter
+        from prompt_toolkit.history import FileHistory
         from prompt_toolkit.key_binding import KeyBindings
 
         hist_path = project_dir / ".pycode" / "history"
@@ -42,7 +52,7 @@ def _make_prompt_reader(project_dir: Path, commands: list[str], status_fn=None):
         # creates terminal output, which only works in a real console (it
         # raises under pipes/tests). Deferring keeps the factory usable in
         # non-interactive contexts while real reads get the full UI.
-        session = {"obj": None}
+        session: dict[str, Any] = {"obj": None}
 
         def _read(prompt_str: str) -> str:
             if session["obj"] is None:
@@ -66,8 +76,14 @@ def _make_prompt_reader(project_dir: Path, commands: list[str], status_fn=None):
         return _read, False
 
 
-def run_repl(*, project_dir: Path, settings, provider_factory,
-             session_store=None, resumed_session=None):
+def run_repl(
+    *,
+    project_dir: Path,
+    settings: Settings,
+    provider_factory: Callable[[Settings], LLMProvider],
+    session_store: SessionStore | None = None,
+    resumed_session: Session | None = None,
+) -> None:
     # Create Console inside the function so it picks up the UTF-8
     # reconfiguration done by _fix_windows_encoding() in main.py.
     console = Console()
@@ -112,6 +128,7 @@ def run_repl(*, project_dir: Path, settings, provider_factory,
                     project_dir, settings, provider_factory, console,
                     session_store=session_store, resumed_session=resumed_session,
                 )
+            assert slash_ctx is not None  # set alongside agent above
             try:
                 handled = registry.dispatch(user, slash_ctx)
             except SystemExit:
@@ -154,8 +171,14 @@ def run_repl(*, project_dir: Path, settings, provider_factory,
             continue
 
 
-def _init_agent(project_dir, settings, provider_factory, console,
-                session_store=None, resumed_session=None):
+def _init_agent(
+    project_dir: Path,
+    settings: Settings,
+    provider_factory: Callable[[Settings], LLMProvider],
+    console: Console,
+    session_store: SessionStore | None = None,
+    resumed_session: Session | None = None,
+) -> tuple[Agent, SlashContext]:
     """Build provider + agent + slash context. Called lazily on first use."""
     provider = provider_factory(settings)
     agent = build_agent_with_provider(

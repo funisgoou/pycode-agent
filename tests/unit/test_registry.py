@@ -1,7 +1,9 @@
 from pydantic import BaseModel
-from pycode_agent.tools.base import Tool, Risk, ToolContext
-from pycode_agent.tools.registry import ToolRegistry
+
 from pycode_agent.core.messages import ToolResult
+from pycode_agent.tools.base import Risk, Tool, ToolContext
+from pycode_agent.tools.registry import ToolRegistry
+
 
 class EchoArgs(BaseModel):
     text: str
@@ -42,8 +44,8 @@ def test_dispatch_bad_args_returns_error(tmp_path):
     assert not res.ok and res.error
 
 def test_registry_tools_lists_registered():
-    from pycode_agent.tools.registry import ToolRegistry
     from pycode_agent.tools.file_tools import ReadFile
+    from pycode_agent.tools.registry import ToolRegistry
     reg = ToolRegistry()
     reg.register(ReadFile())
     tools = reg.tools()

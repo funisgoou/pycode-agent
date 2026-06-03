@@ -1,21 +1,30 @@
 from __future__ import annotations
 
 import difflib
-import subprocess
-from dataclasses import dataclass, field
-from typing import Callable
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
+
 from rich.console import Console
+
+from pycode_agent.utils.proc import run_command
+
+if TYPE_CHECKING:
+    from pycode_agent.config.settings import Settings
+    from pycode_agent.core.agent import Agent
+    from pycode_agent.core.session import SessionStore
 
 
 @dataclass
 class SlashContext:
     """Context passed to every slash-command handler."""
     args: str
-    agent: object  # Agent instance (avoid circular import)
-    settings: object
-    project_dir: object  # Path
+    agent: Agent
+    settings: Settings
+    project_dir: Path
     console: Console
-    session_store: object = None  # SessionStore | None (avoid import cycle)
+    session_store: SessionStore | None = None
 
 
 @dataclass
@@ -115,17 +124,12 @@ def _cmd_status(ctx: SlashContext) -> None:
     ctx.console.print(f"  消息数:   {len(ctx.agent.messages)}")
     ctx.console.print(f"  项目目录: {ctx.project_dir}")
     # Try git status
-    try:
-        result = subprocess.run(
-            ["git", "status", "--short", "--branch"],
-            capture_output=True, text=True, timeout=5,
-            cwd=str(ctx.project_dir),
-        )
-        if result.returncode == 0:
-            first_line = result.stdout.strip().split("\n")[0]
-            ctx.console.print(f"  Git:      {first_line}")
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    result = run_command(
+        ["git", "status", "--short", "--branch"], cwd=ctx.project_dir, timeout=5,
+    )
+    if result.error is None and result.returncode == 0:
+        first_line = result.stdout.strip().split("\n")[0]
+        ctx.console.print(f"  Git:      {first_line}")
 
 
 def _cmd_clear(ctx: SlashContext) -> None:

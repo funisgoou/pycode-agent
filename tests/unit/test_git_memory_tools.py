@@ -1,8 +1,10 @@
 import subprocess
-from pycode_agent.tools.base import ToolContext, Risk
-from pycode_agent.tools.git_tools import GitStatus, GitDiff
+
+from pycode_agent.tools.base import Risk, ToolContext
+from pycode_agent.tools.git_tools import GitDiff, GitStatus
 from pycode_agent.tools.memory_tools import MemoryRead, MemoryWrite
 from pycode_agent.utils.diff import PatchManager
+
 
 def _git(tmp_path):
     subprocess.run(["git", "init", "-q"], cwd=tmp_path)

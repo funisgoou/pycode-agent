@@ -1,4 +1,5 @@
 from typer.testing import CliRunner
+
 from pycode_agent.cli.main import app
 
 runner = CliRunner()
@@ -35,10 +36,12 @@ def test_version():
     assert __version__ in result.stdout
 
 from pathlib import Path
+
 from pycode_agent.cli.builder import build_agent_with_provider
-from pycode_agent.model.fake import FakeLLMProvider
-from pycode_agent.model.base import LLMResponse
 from pycode_agent.config.settings import Settings
+from pycode_agent.model.base import LLMResponse
+from pycode_agent.model.fake import FakeLLMProvider
+
 
 def test_build_agent_runs_with_fake(tmp_path):
     provider = FakeLLMProvider(script=[LLMResponse(text="hi from fake")])
@@ -57,6 +60,7 @@ def test_build_agent_registers_core_tools(tmp_path):
             "run_shell", "git_status", "git_diff", "memory_read", "memory_write"} <= names
 
 import pycode_agent.cli.main as cli_main
+
 
 def test_prompt_non_interactive_success(tmp_path, monkeypatch):
     monkeypatch.setattr(cli_main, "_make_provider",
@@ -149,8 +153,8 @@ def test_prompt_dry_run_sets_flag(tmp_path, monkeypatch):
 def test_builder_injects_context_manager(tmp_path):
     from pycode_agent.cli.builder import build_agent_with_provider
     from pycode_agent.config.settings import Settings
-    from pycode_agent.model.fake import FakeLLMProvider
     from pycode_agent.model.base import LLMResponse
+    from pycode_agent.model.fake import FakeLLMProvider
 
     provider = FakeLLMProvider([LLMResponse(text="ok")])
     agent = build_agent_with_provider(
@@ -168,7 +172,9 @@ def test_builder_registers_str_replace(tmp_path):
 
 
 def test_read_input_falls_back_without_prompt_toolkit(monkeypatch, tmp_path):
-    import builtins, importlib
+    import builtins
+    import importlib
+
     from pycode_agent.cli import repl as repl_mod
     importlib.reload(repl_mod)
 
@@ -187,8 +193,8 @@ def test_read_input_falls_back_without_prompt_toolkit(monkeypatch, tmp_path):
 def test_builder_creates_sink_when_persist_enabled(tmp_path):
     from pycode_agent.cli.builder import build_agent_with_provider
     from pycode_agent.config.settings import Settings
-    from pycode_agent.model.fake import FakeLLMProvider
     from pycode_agent.model.base import LLMResponse
+    from pycode_agent.model.fake import FakeLLMProvider
     provider = FakeLLMProvider([LLMResponse(text="ok")])
     agent = build_agent_with_provider(
         provider=provider, project_dir=tmp_path, settings=Settings())
@@ -198,8 +204,8 @@ def test_builder_creates_sink_when_persist_enabled(tmp_path):
 def test_builder_no_sink_when_persist_disabled(tmp_path):
     from pycode_agent.cli.builder import build_agent_with_provider
     from pycode_agent.config.settings import Settings
-    from pycode_agent.model.fake import FakeLLMProvider
     from pycode_agent.model.base import LLMResponse
+    from pycode_agent.model.fake import FakeLLMProvider
     settings = Settings()
     settings.agent.persist_sessions = False
     provider = FakeLLMProvider([LLMResponse(text="ok")])
@@ -211,10 +217,10 @@ def test_builder_no_sink_when_persist_disabled(tmp_path):
 def test_builder_injects_resumed_messages(tmp_path):
     from pycode_agent.cli.builder import build_agent_with_provider
     from pycode_agent.config.settings import Settings
-    from pycode_agent.core.session import Session
     from pycode_agent.core.messages import Message
-    from pycode_agent.model.fake import FakeLLMProvider
+    from pycode_agent.core.session import Session
     from pycode_agent.model.base import LLMResponse
+    from pycode_agent.model.fake import FakeLLMProvider
     sess = Session(id="s1", title="t", created_at="2026", messages=[
         Message(role="system", content="OLD SYS"),
         Message(role="user", content="earlier"),
@@ -231,8 +237,8 @@ def test_builder_sink_writes_session_file(tmp_path):
     from pycode_agent.cli.builder import build_agent_with_provider
     from pycode_agent.config.settings import Settings
     from pycode_agent.core.session import SessionStore
-    from pycode_agent.model.fake import FakeLLMProvider
     from pycode_agent.model.base import LLMResponse
+    from pycode_agent.model.fake import FakeLLMProvider
     store = SessionStore(tmp_path / ".pycode" / "sessions")
     sess = store.new_session()
     provider = FakeLLMProvider([LLMResponse(text="answer")])
@@ -247,9 +253,10 @@ def test_builder_sink_writes_session_file(tmp_path):
 
 def test_sessions_list_outputs_titles(tmp_path):
     from typer.testing import CliRunner
+
     from pycode_agent.cli.main import app
-    from pycode_agent.core.session import SessionStore
     from pycode_agent.core.messages import Message
+    from pycode_agent.core.session import SessionStore
     store = SessionStore(tmp_path / ".pycode" / "sessions")
     s = store.new_session()
     s.messages = [Message(role="user", content="my first task")]
@@ -263,6 +270,7 @@ def test_sessions_list_outputs_titles(tmp_path):
 
 def test_sessions_list_empty(tmp_path):
     from typer.testing import CliRunner
+
     from pycode_agent.cli.main import app
     runner = CliRunner()
     result = runner.invoke(app, ["sessions", "list", "--project-dir", str(tmp_path)])
@@ -272,6 +280,7 @@ def test_sessions_list_empty(tmp_path):
 
 def test_resume_unknown_id_exits_1(tmp_path):
     from typer.testing import CliRunner
+
     from pycode_agent.cli.main import app
     runner = CliRunner()
     result = runner.invoke(app, ["-p", "hi", "--resume", "nope", "--project-dir", str(tmp_path)])
@@ -288,11 +297,13 @@ def test_resume_unknown_id_exits_1(tmp_path):
 
 def test_builder_confirm_console_highlights_diff(tmp_path):
     from io import StringIO
+
     from rich.console import Console
+
     from pycode_agent.cli.builder import build_agent_with_provider
     from pycode_agent.config.settings import Settings
-    from pycode_agent.model.fake import FakeLLMProvider
     from pycode_agent.model.base import LLMResponse
+    from pycode_agent.model.fake import FakeLLMProvider
 
     buf = StringIO()
     console = Console(file=buf, force_terminal=False, no_color=True, width=80)
@@ -311,8 +322,8 @@ def test_builder_confirm_console_highlights_diff(tmp_path):
 def test_builder_no_confirm_console_keeps_default(tmp_path):
     from pycode_agent.cli.builder import build_agent_with_provider
     from pycode_agent.config.settings import Settings
-    from pycode_agent.model.fake import FakeLLMProvider
     from pycode_agent.model.base import LLMResponse
+    from pycode_agent.model.fake import FakeLLMProvider
     provider = FakeLLMProvider([LLMResponse(text="ok")])
     agent = build_agent_with_provider(
         provider=provider, project_dir=tmp_path, settings=Settings())
@@ -322,11 +333,13 @@ def test_builder_no_confirm_console_keeps_default(tmp_path):
 def test_repl_smoke_renders_response(tmp_path, monkeypatch):
     # Drive run_repl with one user line then EOF; assert the assistant panel renders.
     import io
+
     from rich.console import Console
+
     from pycode_agent.cli import repl as repl_mod
     from pycode_agent.config.settings import Settings
-    from pycode_agent.model.fake import FakeLLMProvider
     from pycode_agent.model.base import LLMResponse
+    from pycode_agent.model.fake import FakeLLMProvider
 
     settings = Settings()
     # provider factory returns a fake provider with one scripted answer
@@ -363,6 +376,7 @@ def test_make_prompt_reader_returns_tuple_with_toolbar(tmp_path):
 
 def test_make_prompt_reader_fallback_without_prompt_toolkit(monkeypatch, tmp_path):
     import builtins
+
     from pycode_agent.cli.repl import _make_prompt_reader
     real_import = builtins.__import__
 
@@ -379,7 +393,9 @@ def test_make_prompt_reader_fallback_without_prompt_toolkit(monkeypatch, tmp_pat
 
 def test_repl_interrupt_during_stream(tmp_path, monkeypatch):
     import io
+
     from rich.console import Console
+
     from pycode_agent.cli import repl as repl_mod
     from pycode_agent.config.settings import Settings
 

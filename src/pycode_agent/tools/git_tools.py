@@ -1,28 +1,23 @@
 from __future__ import annotations
-import subprocess
+
 from pydantic import BaseModel
+
 from pycode_agent.core.messages import ToolResult
-from .base import Tool, Risk, ToolContext
+from pycode_agent.utils.proc import run_command
+
+from .base import NoArgs, Risk, Tool, ToolContext
 
 
 def _git(ctx: ToolContext, *git_args: str) -> ToolResult:
-    try:
-        proc = subprocess.run(
-            ["git", *git_args], cwd=str(ctx.project_dir),
-            capture_output=True, text=True, timeout=30,
-        )
-    except FileNotFoundError:
-        return ToolResult(ok=False, error="git not found")
-    if proc.returncode != 0:
-        return ToolResult(ok=False, error=proc.stderr.strip() or "git failed")
-    return ToolResult(ok=True, content=proc.stdout or "(empty)")
+    res = run_command(["git", *git_args], cwd=ctx.project_dir, timeout=30)
+    if res.error is not None:
+        return ToolResult(ok=False, error="git not found" if "git" in res.error else res.error)
+    if res.returncode != 0:
+        return ToolResult(ok=False, error=res.stderr.strip() or "git failed")
+    return ToolResult(ok=True, content=res.stdout or "(empty)")
 
 
-class NoArgs(BaseModel):
-    pass
-
-
-class GitStatus(Tool):
+class GitStatus(Tool[NoArgs]):
     name = "git_status"
     description = "查看 git 工作区状态"
     args_model = NoArgs
@@ -36,7 +31,7 @@ class DiffArgs(BaseModel):
     staged: bool = False
 
 
-class GitDiff(Tool):
+class GitDiff(Tool[DiffArgs]):
     name = "git_diff"
     description = "查看 git diff(可选 staged)"
     args_model = DiffArgs

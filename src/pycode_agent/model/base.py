@@ -1,7 +1,10 @@
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+
 from pydantic import BaseModel, Field
+
 from pycode_agent.core.messages import Message, ToolCall
 
 
@@ -11,6 +14,11 @@ class LLMResponse(BaseModel):
 
 
 class LLMProvider(ABC):
+    """Abstract chat provider. Concrete subclasses set ``model`` and implement chat()."""
+
+    #: Identifier of the underlying model (e.g. "gpt-4o"). Set by subclasses.
+    model: str
+
     @abstractmethod
     def chat(self, *, messages: list[Message], tools: list[dict]) -> LLMResponse:
         """Single turn. tools is a list of JSON-schema tool specs."""
@@ -24,7 +32,9 @@ class LLMProvider(ABC):
         support true SSE streaming should override this.
         """
         from pycode_agent.model.streaming import (
-            TurnEnd, ToolCallStart, ToolCallEnd,
+            ToolCallEnd,
+            ToolCallStart,
+            TurnEnd,
         )
         resp = self.chat(messages=messages, tools=tools)
         if resp.tool_calls:

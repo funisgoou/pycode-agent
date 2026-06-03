@@ -1,9 +1,15 @@
 from __future__ import annotations
-from typing import Callable
+
+from collections.abc import Callable
 
 
 class Approval:
-    """确认交互。可注入 input/output 以便测试。"""
+    """确认交互。可注入 input/output 以便测试。
+
+    ``out_fn`` 默认用裸 ``print``（保持本模块不依赖 Rich）；交互式 REPL
+    会通过 builder 注入一个 Rich 渲染器（见 ``make_confirm_printer``），
+    使确认提示与 diff 走同一套控制台输出。
+    """
 
     def __init__(self, prompt_fn: Callable[[str], str] = input,
                  out_fn: Callable[[str], None] = print, auto_yes: bool = False):

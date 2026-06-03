@@ -1,11 +1,14 @@
 from __future__ import annotations
+
 import json
-import pytest
+
 import httpx
-from pycode_agent.model.openai_compatible import OpenAICompatibleProvider
-from pycode_agent.model.streaming import TextDelta, ToolCallStart, ToolCallEnd, TurnEnd
-from pycode_agent.model.errors import AuthError, RateLimitError
+import pytest
+
 from pycode_agent.core.messages import Message
+from pycode_agent.model.errors import AuthError, RateLimitError
+from pycode_agent.model.openai_compatible import OpenAICompatibleProvider
+from pycode_agent.model.streaming import TextDelta, ToolCallEnd, ToolCallStart, TurnEnd
 
 
 def _sse_body(chunks: list[dict], final_done: bool = True) -> bytes:

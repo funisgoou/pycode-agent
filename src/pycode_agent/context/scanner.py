@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +17,8 @@ MAX_TREE_ENTRIES = 300
 
 @dataclass
 class ProjectProfile:
+    """Lightweight scan of a project: file tree, detected languages, markers."""
+
     root: Path
     tree: list[str] = field(default_factory=list)
     languages: set[str] = field(default_factory=set)

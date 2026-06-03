@@ -1,7 +1,7 @@
 from __future__ import annotations
-from pycode_agent.core.session import Session
-from pycode_agent.core.session import SessionStore
+
 from pycode_agent.core.messages import Message, ToolCall
+from pycode_agent.core.session import Session, SessionStore
 
 
 def test_session_roundtrip_preserves_messages():

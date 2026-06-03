@@ -1,4 +1,5 @@
-from pycode_agent.context.scanner import scan_project, IGNORED_DIRS
+from pycode_agent.context.scanner import IGNORED_DIRS, scan_project
+
 
 def test_ignores_common_dirs(tmp_path):
     (tmp_path / "src").mkdir()

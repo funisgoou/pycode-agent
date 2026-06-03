@@ -1,8 +1,14 @@
 from __future__ import annotations
+
 import json
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pycode_agent.config.settings import Settings
+    from pycode_agent.model.openai_compatible import OpenAICompatibleProvider
 
 
 def _fix_windows_encoding() -> None:
@@ -26,9 +32,11 @@ def _fix_windows_encoding() -> None:
 _fix_windows_encoding()
 
 import typer
+
 from pycode_agent import __version__
-from pycode_agent.config.loader import load_settings
 from pycode_agent.cli.builder import build_agent_with_provider
+from pycode_agent.config.loader import load_settings
+from pycode_agent.logs.config import setup_logging
 
 app = typer.Typer(add_completion=False, help="PyCodeAgent — terminal coding assistant")
 config_app = typer.Typer(help="管理配置")
@@ -40,8 +48,9 @@ app.add_typer(sessions_app, name="sessions")
 
 @sessions_app.command("list")
 def sessions_list(project_dir: Path = typer.Option(Path("."), "--project-dir")):
-    from pycode_agent.core.session import SessionStore
     from datetime import datetime
+
+    from pycode_agent.core.session import SessionStore
     store = SessionStore(project_dir / ".pycode" / "sessions")
     meta = store.list_meta()
     if not meta:
@@ -52,7 +61,7 @@ def sessions_list(project_dir: Path = typer.Option(Path("."), "--project-dir")):
         typer.echo(f'{m["id"]}  {when}  turns={m["turns"]}  {m["title"]}')
 
 
-def _make_provider(settings):
+def _make_provider(settings: Settings) -> OpenAICompatibleProvider:
     from pycode_agent.model.openai_compatible import OpenAICompatibleProvider
     return OpenAICompatibleProvider(
         model=settings.model.name,
@@ -76,9 +85,11 @@ def main(
     quiet: bool = typer.Option(False, "--quiet", help="仅输出最终结果,抑制额外信息"),
     max_turns: int = typer.Option(None, "--max-turns", help="覆盖最大循环轮数"),
     dry_run: bool = typer.Option(False, "--dry-run", help="高风险操作只预览不执行"),
+    debug: bool = typer.Option(False, "--debug", help="输出调试日志到 stderr"),
     continue_latest: bool = typer.Option(False, "--continue", help="恢复最近一次会话"),
     resume: str = typer.Option(None, "--resume", help="按 id 恢复指定会话"),
 ):
+    setup_logging("DEBUG" if debug else None)
     if version:
         typer.echo(__version__)
         raise typer.Exit()
@@ -94,7 +105,7 @@ def main(
             resumed_session = store.load(resume)
         except KeyError:
             typer.echo(f"error: session not found: {resume}", err=True)
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
     elif continue_latest:
         resumed_session = store.latest()
         if resumed_session is None:
@@ -117,7 +128,7 @@ def main(
                 typer.echo(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
             else:
                 typer.echo(f"error: {e}", err=True)
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
         if json_out:
             typer.echo(json.dumps(
                 {"ok": True, "result": out, "rejections": agent.rejections},
@@ -150,7 +161,7 @@ def config_get(key: str, project_dir: Path = typer.Option(Path("."), "--project-
         value, source = get_setting_for_dir(project_dir, key)
     except KeyError as e:
         typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     typer.echo(f"{key} = {value}  (source: {source})")
 
 
@@ -162,8 +173,8 @@ def config_set(key: str, value: str,
         coerced = set_project_setting(project_dir, key, value)
     except KeyError as e:
         typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     except Exception as e:  # validation failure
         typer.echo(f"error: invalid value for {key}: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     typer.echo(f"set {key} = {coerced}  (written to project config)")

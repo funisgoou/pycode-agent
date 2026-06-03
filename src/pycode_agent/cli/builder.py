@@ -1,21 +1,32 @@
 from __future__ import annotations
+
+from collections.abc import Callable
 from pathlib import Path
+
+from pycode_agent.cli.render import make_confirm_printer
 from pycode_agent.config.settings import Settings
 from pycode_agent.core.agent import Agent
-from pycode_agent.model.base import LLMProvider
-from pycode_agent.tools.base import ToolContext
-from pycode_agent.tools.registry import ToolRegistry
-from pycode_agent.tools.file_tools import ReadFile, ListDir, SearchText, WriteFile, EditFile, StrReplace
-from pycode_agent.tools.shell_tools import RunShell
-from pycode_agent.tools.git_tools import GitStatus, GitDiff
-from pycode_agent.tools.memory_tools import MemoryRead, MemoryWrite
-from pycode_agent.security.policy import Policy
-from pycode_agent.security.approval import Approval
-from pycode_agent.logs.audit import AuditLog
-from pycode_agent.utils.diff import PatchManager
 from pycode_agent.core.context_manager import ContextManager
+from pycode_agent.core.messages import Message
 from pycode_agent.core.session import Session, SessionStore
-from pycode_agent.cli.render import make_confirm_printer
+from pycode_agent.logs.audit import AuditLog
+from pycode_agent.model.base import LLMProvider
+from pycode_agent.security.approval import Approval
+from pycode_agent.security.policy import Policy
+from pycode_agent.tools.base import ToolContext
+from pycode_agent.tools.file_tools import (
+    EditFile,
+    ListDir,
+    ReadFile,
+    SearchText,
+    StrReplace,
+    WriteFile,
+)
+from pycode_agent.tools.git_tools import GitDiff, GitStatus
+from pycode_agent.tools.memory_tools import MemoryRead, MemoryWrite
+from pycode_agent.tools.registry import ToolRegistry
+from pycode_agent.tools.shell_tools import RunShell
+from pycode_agent.utils.diff import PatchManager
 
 
 def _build_registry(settings: Settings) -> ToolRegistry:
@@ -28,8 +39,10 @@ def _build_registry(settings: Settings) -> ToolRegistry:
     return reg
 
 
-def _make_session_sink(store: SessionStore, session: Session):
-    def sink(messages):
+def _make_session_sink(
+    store: SessionStore, session: Session
+) -> Callable[[list[Message]], None]:
+    def sink(messages: list[Message]) -> None:
         session.messages = list(messages)
         session.title = Session.make_title(messages)
         store.save(session)

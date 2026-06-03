@@ -1,6 +1,9 @@
 from pathlib import Path
-from pycode_agent.utils.diff import PatchManager, ConflictError
+
 import pytest
+
+from pycode_agent.utils.diff import ConflictError, PatchManager
+
 
 def test_preview_unified_diff(tmp_path):
     f = tmp_path / "a.txt"

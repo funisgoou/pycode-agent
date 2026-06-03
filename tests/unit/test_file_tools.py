@@ -1,7 +1,9 @@
 from pathlib import Path
-from pycode_agent.tools.base import ToolContext, Risk
-from pycode_agent.tools.file_tools import ReadFile, ListDir, SearchText, WriteFile
+
+from pycode_agent.tools.base import Risk, ToolContext
+from pycode_agent.tools.file_tools import ListDir, ReadFile, SearchText, WriteFile
 from pycode_agent.utils.diff import PatchManager
+
 
 def _ctx(tmp_path) -> ToolContext:
     return ToolContext(project_dir=tmp_path, patch_manager=PatchManager())
@@ -36,15 +38,15 @@ def test_write_file_creates(tmp_path):
     assert (tmp_path / "new.txt").read_text(encoding="utf-8") == "hi\n"
 
 def test_read_path_traversal_blocked_via_dispatch(tmp_path):
-    from pycode_agent.tools.registry import ToolRegistry
     from pycode_agent.tools.file_tools import ReadFile
+    from pycode_agent.tools.registry import ToolRegistry
     reg = ToolRegistry(); reg.register(ReadFile())
     res = reg.dispatch("read_file", {"path": "../../etc/passwd"}, _ctx(tmp_path))
     assert not res.ok and "escape" in res.error.lower()
 
 def test_absolute_path_blocked_via_dispatch(tmp_path):
-    from pycode_agent.tools.registry import ToolRegistry
     from pycode_agent.tools.file_tools import ReadFile
+    from pycode_agent.tools.registry import ToolRegistry
     reg = ToolRegistry(); reg.register(ReadFile())
     # an absolute path outside project
     outside = "/etc/hosts" if not str(tmp_path).startswith("C:") else "C:/Windows/win.ini"
@@ -89,3 +91,48 @@ def test_str_replace_missing_file(tmp_path):
     ctx = _ctx(tmp_path)
     res = StrReplace().run(StrReplaceArgs(path="nope.py", old_string="a", new_string="b"), ctx)
     assert not res.ok and "not a file" in res.error
+
+
+def test_search_text_python_fallback(tmp_path, monkeypatch):
+    # Force the rg branch to fail so the pure-Python fallback runs.
+    import pycode_agent.tools.file_tools as ft
+    from pycode_agent.utils.proc import ProcResult
+    monkeypatch.setattr(
+        ft, "run_command",
+        lambda *a, **k: ProcResult(ok=False, returncode=-1, stdout="", stderr="", error="not found"),
+    )
+    (tmp_path / "a.py").write_text("hello world\nfoo\n", encoding="utf-8")
+    res = SearchText().run(SearchText.args_model(query="hello"), _ctx(tmp_path))
+    assert res.ok and "a.py" in res.content and "hello" in res.content
+
+
+def test_search_text_fallback_skips_sensitive(tmp_path, monkeypatch):
+    import pycode_agent.tools.file_tools as ft
+    from pycode_agent.utils.proc import ProcResult
+    monkeypatch.setattr(
+        ft, "run_command",
+        lambda *a, **k: ProcResult(ok=False, returncode=-1, stdout="", stderr="", error="not found"),
+    )
+    (tmp_path / ".env").write_text("APIKEY=hello\n", encoding="utf-8")
+    res = SearchText().run(SearchText.args_model(query="hello"), _ctx(tmp_path))
+    assert res.ok and ".env" not in res.content
+
+
+def test_write_preview_shows_diff(tmp_path):
+    res = WriteFile().preview(WriteFile.args_model(path="new.txt", content="hi\n"), _ctx(tmp_path))
+    assert "hi" in res
+
+
+def test_str_replace_preview_shows_diff(tmp_path):
+    from pycode_agent.tools.file_tools import StrReplace, StrReplaceArgs
+    (tmp_path / "f.py").write_text("alpha\nbeta\n", encoding="utf-8")
+    out = StrReplace().preview(StrReplaceArgs(path="f.py", old_string="beta", new_string="BETA"), _ctx(tmp_path))
+    assert "BETA" in out
+
+
+def test_write_file_without_patch_manager(tmp_path):
+    # ctx.patch_manager is None → falls back to a default PatchManager, no crash.
+    ctx = ToolContext(project_dir=tmp_path)
+    res = WriteFile().run(WriteFile.args_model(path="n.txt", content="x\n"), ctx)
+    assert res.ok
+    assert (tmp_path / "n.txt").read_text(encoding="utf-8") == "x\n"

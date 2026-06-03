@@ -1,5 +1,6 @@
 from pycode_agent.core.messages import Message, ToolCall, ToolResult
 
+
 def test_toolcall_roundtrip():
     tc = ToolCall(id="c1", name="read_file", arguments={"path": "a.py"})
     assert tc.name == "read_file"

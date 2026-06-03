@@ -1,16 +1,27 @@
 from __future__ import annotations
+
 from io import StringIO
+
 from rich.console import Console
-from rich.syntax import Syntax
 from rich.panel import Panel
+from rich.syntax import Syntax
 
 from pycode_agent.cli.render import (
-    status_line, status_text, welcome_banner, assistant_panel, tool_result_panel,
-    diff_to_renderable, _looks_like_diff,
+    StreamRenderer,
+    _looks_like_diff,
+    assistant_panel,
+    diff_to_renderable,
+    status_line,
+    status_text,
+    tool_result_panel,
+    welcome_banner,
 )
-from pycode_agent.cli.render import StreamRenderer
 from pycode_agent.model.streaming import (
-    TextDelta, ToolCallStart, ToolCallEnd, ToolResultEvent, TurnEnd,
+    TextDelta,
+    ToolCallEnd,
+    ToolCallStart,
+    ToolResultEvent,
+    TurnEnd,
 )
 
 
@@ -258,6 +269,7 @@ def test_stream_renderer_shows_thinking_after_tool_result(monkeypatch):
 # ── Welcome banner ──────────────────────────────────────────────────
 
 from pathlib import Path
+
 from rich.table import Table
 
 

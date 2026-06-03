@@ -1,12 +1,17 @@
 from __future__ import annotations
+
 import pytest
+
+from pycode_agent.core.messages import Message, ToolCall
 from pycode_agent.model.base import LLMResponse
 from pycode_agent.model.fake import FakeLLMProvider
 from pycode_agent.model.streaming import (
-    TextDelta, ToolCallStart, ToolCallEnd, ToolResultEvent, TurnEnd,
+    TextDelta,
+    ToolCallEnd,
+    ToolCallStart,
+    ToolResultEvent,
+    TurnEnd,
 )
-from pycode_agent.core.messages import Message, ToolCall
-
 
 # ---------------------------------------------------------------------------
 # FakeLLMProvider.chat_stream (inherited default from LLMProvider)
@@ -59,12 +64,12 @@ class TestFakeProviderStream:
 
 def _agent(tmp_path, script, tools=None, auto_yes=False, max_turns=12):
     """Build an Agent with FakeLLMProvider for testing."""
-    from pycode_agent.tools.base import Tool, ToolContext, Risk
-    from pycode_agent.tools.registry import ToolRegistry
-    from pycode_agent.core.agent import Agent, SYSTEM_PROMPT
-    from pycode_agent.security.policy import Policy
-    from pycode_agent.security.approval import Approval
+    from pycode_agent.core.agent import SYSTEM_PROMPT, Agent
     from pycode_agent.logs.audit import AuditLog
+    from pycode_agent.security.approval import Approval
+    from pycode_agent.security.policy import Policy
+    from pycode_agent.tools.base import Risk, Tool, ToolContext
+    from pycode_agent.tools.registry import ToolRegistry
     from pycode_agent.utils.diff import PatchManager
 
     provider = FakeLLMProvider(script)
@@ -87,8 +92,9 @@ def _agent(tmp_path, script, tools=None, auto_yes=False, max_turns=12):
 
 class _EchoTool:
     """A simple LOW-risk tool for testing."""
-    from pycode_agent.tools.base import Tool, ToolContext, Risk, ToolResult
     from pydantic import BaseModel
+
+    from pycode_agent.tools.base import Risk, Tool, ToolContext, ToolResult
 
     class _Args(__import__("pydantic").BaseModel):
         text: str = ""

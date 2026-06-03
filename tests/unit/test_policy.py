@@ -1,5 +1,8 @@
+import pytest
+
+from pycode_agent.security.policy import Decision, Policy
 from pycode_agent.tools.base import Risk
-from pycode_agent.security.policy import Policy, Decision
+
 
 def test_readonly_blocks_high_risk():
     p = Policy(mode="readonly")
@@ -19,3 +22,7 @@ def test_workspace_allows_medium_confirms_high():
 def test_dangerous_allows_all():
     p = Policy(mode="dangerous")
     assert p.evaluate(Risk.HIGH) == Decision.ALLOW
+
+def test_invalid_mode_raises():
+    with pytest.raises(ValueError):
+        Policy(mode="yolo")

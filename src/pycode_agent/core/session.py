@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import json
 import os
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from dataclasses import dataclass, field
+
 from pycode_agent.core.messages import Message
 
 _TITLE_MAX = 50
@@ -12,6 +14,8 @@ _TITLE_MAX = 50
 
 @dataclass
 class Session:
+    """A persisted conversation: an id, a derived title, and its message log."""
+
     id: str
     title: str
     created_at: str
@@ -26,7 +30,7 @@ class Session:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Session":
+    def from_dict(cls, data: dict) -> Session:
         return cls(
             id=data["id"],
             title=data.get("title", "(empty)"),

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from pycode_agent.security.approval import Approval
 
 

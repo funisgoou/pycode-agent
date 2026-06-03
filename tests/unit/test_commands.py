@@ -1,23 +1,27 @@
 from __future__ import annotations
-import pytest
+
 from io import StringIO
 from pathlib import Path
+
+import pytest
 from rich.console import Console
 
 from pycode_agent.cli.commands import (
-    SlashCommandRegistry, SlashContext, build_builtin_registry,
+    SlashCommandRegistry,
+    SlashContext,
+    build_builtin_registry,
 )
-from pycode_agent.model.base import LLMResponse
-from pycode_agent.model.fake import FakeLLMProvider
+from pycode_agent.config.loader import load_settings
 from pycode_agent.core.agent import Agent
 from pycode_agent.core.messages import Message
-from pycode_agent.tools.registry import ToolRegistry
-from pycode_agent.tools.base import ToolContext
-from pycode_agent.security.policy import Policy
-from pycode_agent.security.approval import Approval
 from pycode_agent.logs.audit import AuditLog
+from pycode_agent.model.base import LLMResponse
+from pycode_agent.model.fake import FakeLLMProvider
+from pycode_agent.security.approval import Approval
+from pycode_agent.security.policy import Policy
+from pycode_agent.tools.base import ToolContext
+from pycode_agent.tools.registry import ToolRegistry
 from pycode_agent.utils.diff import PatchManager
-from pycode_agent.config.loader import load_settings
 
 
 def _make_ctx(tmp_path, console=None, agent=None):
@@ -141,8 +145,8 @@ class TestSlashCommandRegistry:
     def test_tools_lists_tools(self, tmp_path):
         from pycode_agent.cli.builder import build_agent_with_provider
         from pycode_agent.config.settings import Settings
-        from pycode_agent.model.fake import FakeLLMProvider
         from pycode_agent.model.base import LLMResponse
+        from pycode_agent.model.fake import FakeLLMProvider
         provider = FakeLLMProvider([LLMResponse(text="ok")])
         agent = build_agent_with_provider(
             provider=provider, project_dir=tmp_path, settings=Settings())
@@ -157,8 +161,8 @@ class TestSlashCommandRegistry:
     def test_tokens_shows_estimate(self, tmp_path):
         from pycode_agent.cli.builder import build_agent_with_provider
         from pycode_agent.config.settings import Settings
-        from pycode_agent.model.fake import FakeLLMProvider
         from pycode_agent.model.base import LLMResponse
+        from pycode_agent.model.fake import FakeLLMProvider
         provider = FakeLLMProvider([LLMResponse(text="ok")])
         agent = build_agent_with_provider(
             provider=provider, project_dir=tmp_path, settings=Settings())
@@ -188,8 +192,8 @@ class TestSlashCommandRegistry:
         assert "没有" in buf.getvalue()
 
     def test_sessions_lists(self, tmp_path):
-        from pycode_agent.core.session import SessionStore
         from pycode_agent.core.messages import Message
+        from pycode_agent.core.session import SessionStore
         store = SessionStore(tmp_path / ".pycode" / "sessions")
         s = store.new_session()
         s.messages = [Message(role="user", content="task one")]
@@ -204,8 +208,8 @@ class TestSlashCommandRegistry:
         assert "task one" in buf.getvalue()
 
     def test_resume_switches_messages(self, tmp_path):
-        from pycode_agent.core.session import SessionStore
         from pycode_agent.core.messages import Message
+        from pycode_agent.core.session import SessionStore
         store = SessionStore(tmp_path / ".pycode" / "sessions")
         s = store.new_session()
         s.messages = [Message(role="system", content="S"), Message(role="user", content="restored msg")]
@@ -235,10 +239,10 @@ class TestSlashCommandRegistry:
         # agent's original session file.
         from pycode_agent.cli.builder import build_agent_with_provider
         from pycode_agent.config.settings import Settings
-        from pycode_agent.core.session import SessionStore
         from pycode_agent.core.messages import Message
-        from pycode_agent.model.fake import FakeLLMProvider
+        from pycode_agent.core.session import SessionStore
         from pycode_agent.model.base import LLMResponse
+        from pycode_agent.model.fake import FakeLLMProvider
 
         store = SessionStore(tmp_path / ".pycode" / "sessions")
         # target session X to resume into
@@ -277,8 +281,8 @@ class TestSlashCommandRegistry:
     def test_diff_highlights_after_edit(self, tmp_path):
         from pycode_agent.cli.builder import build_agent_with_provider
         from pycode_agent.config.settings import Settings
-        from pycode_agent.model.fake import FakeLLMProvider
         from pycode_agent.model.base import LLMResponse
+        from pycode_agent.model.fake import FakeLLMProvider
         provider = FakeLLMProvider([LLMResponse(text="ok")])
         agent = build_agent_with_provider(
             provider=provider, project_dir=tmp_path, settings=Settings())

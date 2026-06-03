@@ -1,20 +1,30 @@
 from __future__ import annotations
+
 import json
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+
 import httpx
-from typing import Callable
+
 from pycode_agent.core.messages import Message, ToolCall
+
 from .base import LLMProvider, LLMResponse
 from .errors import (
-    AuthError, RateLimitError, TimeoutError, NetworkError, ProviderError,
+    AuthError,
+    NetworkError,
+    ProviderError,
+    RateLimitError,
+    TimeoutError,
 )
-from .streaming import TextDelta, ToolCallStart, ToolCallEnd, TurnEnd
+from .streaming import TextDelta, ToolCallEnd, ToolCallStart, TurnEnd
 
 
 def _message_to_dict(m: Message) -> dict:
     d: dict = {"role": m.role}
-    d["content"] = m.content
+    # Omit a null content when the message instead carries tool calls — some
+    # strict OpenAI-compatible backends reject `content: null`.
+    if m.content is not None or not m.tool_calls:
+        d["content"] = m.content
     if m.tool_calls:
         d["tool_calls"] = [
             {"id": tc.id, "type": "function",
@@ -93,7 +103,14 @@ class OpenAICompatibleProvider(LLMProvider):
         if resp.status_code >= 400:
             raise ProviderError(f"http {resp.status_code}: {resp.text[:200]}")
 
-        msg = resp.json()["choices"][0]["message"]
+        try:
+            data = resp.json()
+        except ValueError as e:
+            raise ProviderError(f"invalid JSON in response: {resp.text[:200]}") from e
+        try:
+            msg = data["choices"][0]["message"]
+        except (KeyError, IndexError, TypeError) as e:
+            raise ProviderError(f"unexpected response shape: {str(data)[:200]}") from e
         tool_calls: list[ToolCall] = []
         for tc in msg.get("tool_calls") or []:
             fn = tc["function"]
