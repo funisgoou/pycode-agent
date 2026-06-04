@@ -16,7 +16,7 @@ from .errors import (
     RateLimitError,
     TimeoutError,
 )
-from .streaming import TextDelta, ToolCallEnd, ToolCallStart, TurnEnd
+from .streaming import TextDelta, ToolCallEnd, ToolCallStart, TurnEnd, UsageEvent
 
 
 def _message_to_dict(m: Message) -> dict:
@@ -211,6 +211,18 @@ class OpenAICompatibleProvider(LLMProvider):
                     except json.JSONDecodeError:
                         args = {}
                     yield ToolCallEnd(id=entry["id"], name=entry["name"], arguments=args)
+
+                # Emit usage if present (some providers include it in the final chunk)
+                try:
+                    usage = chunk.get("usage")
+                    if usage:
+                        yield UsageEvent(
+                            prompt_tokens=usage.get("prompt_tokens", 0),
+                            completion_tokens=usage.get("completion_tokens", 0),
+                            total_tokens=usage.get("total_tokens", 0),
+                        )
+                except Exception:
+                    pass
 
                 if not has_tool_calls:
                     yield TurnEnd(text=None)

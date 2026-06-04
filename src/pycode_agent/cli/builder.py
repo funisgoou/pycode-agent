@@ -71,7 +71,8 @@ def build_agent_with_provider(*, provider: LLMProvider, project_dir: Path,
             session = session_store.new_session()
         sink = _make_session_sink(session_store, session)
     if confirm_console is not None:
-        approval = Approval(auto_yes=auto_yes, out_fn=make_confirm_printer(confirm_console))
+        approval = Approval(auto_yes=auto_yes, out_fn=make_confirm_printer(confirm_console),
+                            console=confirm_console)
     else:
         approval = Approval(auto_yes=auto_yes)
     agent = Agent(

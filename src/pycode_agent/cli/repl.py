@@ -156,7 +156,15 @@ def run_repl(
             with console.status("[dim]Thinking...[/]", spinner="dots"):
                 stream_iter = agent.run_stream(user)
                 first_event = next(stream_iter)
-            StreamRenderer(console).consume(
+
+            def token_str() -> str:
+                cm = getattr(agent, "context_manager", None)
+                if cm is not None:
+                    est = cm.estimate_tokens(agent.messages)
+                    return f"📊 {est // 1000}k/{cm.budget // 1000}k tokens"
+                return ""
+
+            StreamRenderer(console, token_count_fn=token_str).consume(
                 itertools.chain([first_event], stream_iter)
             )
         except KeyboardInterrupt:

@@ -42,3 +42,11 @@ class TurnEnd(StreamEvent):
     """The agent's final answer for this run."""
     type: str = "turn_end"
     text: str | None = None
+
+
+class UsageEvent(StreamEvent):
+    """Token usage info from the API (emitted once per streaming turn)."""
+    type: str = "usage"
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
