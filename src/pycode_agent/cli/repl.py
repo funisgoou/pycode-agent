@@ -107,7 +107,7 @@ def run_repl(
                 "/tools", "/tokens", "/memory", "/diff", "/sessions", "/resume",
                 "/exit", "/quit"]
     def _status_fn():
-        return status_text(agent, settings, project_dir) if agent is not None else str(project_dir)
+        return status_text(agent, settings) if agent is not None else ""
     read_input, has_toolbar = _make_prompt_reader(project_dir, commands, status_fn=_status_fn)
 
     while True:
@@ -149,7 +149,7 @@ def run_repl(
         # With a bottom toolbar the status is already persistent; only the
         # fallback (no prompt_toolkit) needs the scrolling status line.
         if not has_toolbar:
-            console.print(status_line(agent, settings, project_dir))
+            console.print(status_line(agent, settings))
 
         # Normal agent interaction via streaming.
         try:
@@ -164,7 +164,8 @@ def run_repl(
                     return f"📊 {est // 1000}k/{cm.budget // 1000}k tokens"
                 return ""
 
-            StreamRenderer(console, token_count_fn=token_str).consume(
+            StreamRenderer(console, token_count_fn=token_str,
+                           project_dir=str(project_dir)).consume(
                 itertools.chain([first_event], stream_iter)
             )
         except KeyboardInterrupt:

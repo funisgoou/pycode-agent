@@ -30,11 +30,9 @@ if TYPE_CHECKING:
 _SUMMARY_MAX = 200
 
 
-def _status_parts(agent: Agent, settings: Settings, project_dir: Path | str = "") -> list[str]:
-    """Shared status fields: model, mode, cwd, and tokens (if a context manager)."""
+def _status_parts(agent: Agent, settings: Settings) -> list[str]:
+    """Shared status fields: model, mode, and tokens (if a context manager)."""
     parts = [str(agent.provider.model), str(settings.security.mode)]
-    if project_dir:
-        parts.append(str(project_dir))
     cm = getattr(agent, "context_manager", None)
     if cm is not None:
         est = cm.estimate_tokens(agent.messages)
@@ -42,14 +40,14 @@ def _status_parts(agent: Agent, settings: Settings, project_dir: Path | str = ""
     return parts
 
 
-def status_line(agent: Agent, settings: Settings, project_dir: Path | str = "") -> Text:
-    """A dim status line shown above each prompt: model · mode · cwd · tokens."""
-    return Text("  " + "  ·  ".join(_status_parts(agent, settings, project_dir)), style="dim")
+def status_line(agent: Agent, settings: Settings) -> Text:
+    """A dim status line shown above each prompt: model · mode · tokens."""
+    return Text("  " + "  ·  ".join(_status_parts(agent, settings)), style="dim")
 
 
-def status_text(agent: Agent, settings: Settings, project_dir: Path | str = "") -> str:
+def status_text(agent: Agent, settings: Settings) -> str:
     """Plain-string status for prompt_toolkit bottom_toolbar."""
-    return "  ·  ".join(_status_parts(agent, settings, project_dir))
+    return "  ·  ".join(_status_parts(agent, settings))
 
 
 # ── Welcome banner ──────────────────────────────────────────────────
@@ -105,8 +103,10 @@ def welcome_banner(settings: Settings, project_dir: Path, *, version: str = "") 
     return table
 
 
-def assistant_panel(text: str, elapsed_ms: float = 0) -> Panel:
+def assistant_panel(text: str, elapsed_ms: float = 0, cwd: str = "") -> Panel:
     title = "assistant"
+    if cwd:
+        title += f"  ·  {cwd}"
     if elapsed_ms > 0:
         title += f"  ⏱ {elapsed_ms / 1000:.1f}s"
     return Panel(Markdown(text), title=title, title_align="left",
@@ -157,7 +157,8 @@ class StreamRenderer:
     footer so the user can see response time as it ticks.
     """
 
-    def __init__(self, console: Console, token_count_fn: Callable[[], str] | None = None):
+    def __init__(self, console: Console, token_count_fn: Callable[[], str] | None = None,
+                 project_dir: str = ""):
         self.console = console
         self._buffer: list[str] = []
         self._live: Live | None = None
@@ -165,6 +166,7 @@ class StreamRenderer:
         self.final_text = ""
         self._start_time: float = 0
         self._token_count_fn = token_count_fn
+        self._project_dir = project_dir
 
     def consume(self, events: Iterable[StreamEvent]) -> str:
         self._start_time = time.time()
@@ -220,7 +222,7 @@ class StreamRenderer:
             if self._buffer:
                 self._finalize_text(elapsed)
             elif event.text:
-                self.console.print(assistant_panel(event.text, elapsed))
+                self.console.print(assistant_panel(event.text, elapsed, self._project_dir))
                 self.final_text += event.text
         elif isinstance(event, UsageEvent):
             pass  # future: store for display
@@ -286,5 +288,5 @@ class StreamRenderer:
         text = "".join(self._buffer)
         self._buffer = []
         self._stop_live()
-        self.console.print(assistant_panel(text, elapsed_ms))
+        self.console.print(assistant_panel(text, elapsed_ms, self._project_dir))
         self.final_text += text
