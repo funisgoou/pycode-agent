@@ -96,6 +96,9 @@ def main(
     if ctx.invoked_subcommand is not None:
         return
 
+    # Resolve project_dir to absolute path so displays show the real cwd.
+    project_dir = project_dir.resolve()
+
     settings = load_settings(project_dir)
     from pycode_agent.core.session import SessionStore
     store = SessionStore(project_dir / ".pycode" / "sessions")
