@@ -30,9 +30,11 @@ if TYPE_CHECKING:
 _SUMMARY_MAX = 200
 
 
-def _status_parts(agent: Agent, settings: Settings) -> list[str]:
-    """Shared status fields: model, mode, and tokens (if a context manager)."""
+def _status_parts(agent: Agent, settings: Settings, project_dir: Path | str = "") -> list[str]:
+    """Shared status fields: model, mode, cwd, and tokens (if a context manager)."""
     parts = [str(agent.provider.model), str(settings.security.mode)]
+    if project_dir:
+        parts.append(str(project_dir))
     cm = getattr(agent, "context_manager", None)
     if cm is not None:
         est = cm.estimate_tokens(agent.messages)
@@ -40,14 +42,14 @@ def _status_parts(agent: Agent, settings: Settings) -> list[str]:
     return parts
 
 
-def status_line(agent: Agent, settings: Settings) -> Text:
-    """A dim status line shown above each prompt: model · mode · tokens."""
-    return Text("  " + "  ·  ".join(_status_parts(agent, settings)), style="dim")
+def status_line(agent: Agent, settings: Settings, project_dir: Path | str = "") -> Text:
+    """A dim status line shown above each prompt: model · mode · cwd · tokens."""
+    return Text("  " + "  ·  ".join(_status_parts(agent, settings, project_dir)), style="dim")
 
 
-def status_text(agent: Agent, settings: Settings) -> str:
+def status_text(agent: Agent, settings: Settings, project_dir: Path | str = "") -> str:
     """Plain-string status for prompt_toolkit bottom_toolbar."""
-    return "  ·  ".join(_status_parts(agent, settings))
+    return "  ·  ".join(_status_parts(agent, settings, project_dir))
 
 
 # ── Welcome banner ──────────────────────────────────────────────────

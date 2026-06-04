@@ -107,12 +107,12 @@ def run_repl(
                 "/tools", "/tokens", "/memory", "/diff", "/sessions", "/resume",
                 "/exit", "/quit"]
     def _status_fn():
-        return status_text(agent, settings) if agent is not None else ""
+        return status_text(agent, settings, project_dir) if agent is not None else str(project_dir)
     read_input, has_toolbar = _make_prompt_reader(project_dir, commands, status_fn=_status_fn)
 
     while True:
         try:
-            user = read_input("You > ").strip()
+            user = read_input(f"{project_dir.name} > ").strip()
         except (EOFError, KeyboardInterrupt):
             console.print("\nbye")
             return
@@ -149,7 +149,7 @@ def run_repl(
         # With a bottom toolbar the status is already persistent; only the
         # fallback (no prompt_toolkit) needs the scrolling status line.
         if not has_toolbar:
-            console.print(status_line(agent, settings))
+            console.print(status_line(agent, settings, project_dir))
 
         # Normal agent interaction via streaming.
         try:
