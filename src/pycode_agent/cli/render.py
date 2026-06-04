@@ -10,7 +10,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
-from rich.table import Table
+
 from rich.text import Text
 
 from pycode_agent.model.streaming import (
@@ -53,22 +53,22 @@ def status_text(agent: Agent, settings: Settings) -> str:
 # ── Welcome banner ──────────────────────────────────────────────────
 # Mini terminal icon (left) + project info (right).
 
-_ICON = [
-    " ┌───────────┐ ",
-    " │ $ python  │ ",
-    " │ > import  │ ",
-    " │ ✓ ready _ │ ",
-    " └───────────┘ ",
-]
-
-
-def welcome_banner(settings: Settings, project_dir: Path, *, version: str = "") -> Table:
-    """Two-column welcome banner: mini terminal icon + info."""
+def welcome_banner(settings: Settings, project_dir: Path, *, version: str = "") -> Panel:
+    """Clean welcome panel: key info at a glance, no decorative cruft."""
     model = str(settings.model.name)
     mode = str(settings.security.mode)
     cwd = str(project_dir)
 
-    # ── right-hand info lines ──
+    body = Text()
+    body.append("Model   ", style="dim")
+    body.append(model, style="white")
+    body.append("\n")
+    body.append("Mode    ", style="dim")
+    body.append(mode, style="white")
+    body.append("\n")
+    body.append("CWD     ", style="dim")
+    body.append(cwd, style="white")
+
     title = Text()
     title.append("Py", style="bold bright_magenta")
     title.append("Code", style="bold bright_cyan")
@@ -76,31 +76,14 @@ def welcome_banner(settings: Settings, project_dir: Path, *, version: str = "") 
     if version:
         title.append(f"  v{version}", style="bright_black")
 
-    divider = Text("─" * 32, style="dim cyan")
-
-    info_mm = Text()
-    info_mm.append("> ", style="bold bright_green")
-    info_mm.append(model, style="white")
-    info_mm.append("  ·  ", style="dim")
-    info_mm.append(mode, style="white")
-
-    info_cwd = Text()
-    info_cwd.append("> ", style="bold bright_green")
-    info_cwd.append(cwd, style="dim")
-
-    # ── two-column table ──
-    table = Table(box=None, show_header=False, show_edge=False,
-                  padding=(0, 2), pad_edge=False)
-    table.add_column(min_width=15)   # icon
-    table.add_column()               # info
-
-    table.add_row(Text(_ICON[0], style="bright_cyan"),    title)
-    table.add_row(Text(_ICON[1], style="bright_green"),   divider)
-    table.add_row(Text(_ICON[2], style="bright_green"),   info_mm)
-    table.add_row(Text(_ICON[3], style="bright_yellow"),  info_cwd)
-    table.add_row(Text(_ICON[4], style="bright_cyan"),    Text())
-
-    return table
+    return Panel(
+        body,
+        title=title,
+        title_align="left",
+        border_style="cyan",
+        subtitle="/help 查看命令  ·  Ctrl-C 中断生成",
+        subtitle_align="left",
+    )
 
 
 def assistant_panel(text: str, elapsed_ms: float = 0, cwd: str = "") -> Panel:

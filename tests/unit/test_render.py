@@ -270,35 +270,35 @@ def test_stream_renderer_shows_thinking_after_tool_result(monkeypatch):
 
 from pathlib import Path
 
-from rich.table import Table
+
 
 
 def test_welcome_banner_renders_version_and_info():
+    from rich.panel import Panel
     from pycode_agent.config.settings import Settings
     s = Settings()
-    table = welcome_banner(s, Path("/my/project"), version="1.2.3")
-    assert isinstance(table, Table)
-    out = _render(table)
+    panel = welcome_banner(s, Path("/my/project"), version="1.2.3")
+    assert isinstance(panel, Panel)
+    out = _render(panel)
     assert "Py" in out and "Code" in out
     assert "1.2.3" in out
     assert s.model.name in out
     assert s.security.mode in out
+    assert "my" in out and "project" in out  # cwd visible
 
 
-def test_welcome_banner_renders_icon():
+def test_welcome_banner_shows_cwd():
     from pycode_agent.config.settings import Settings
     s = Settings()
-    table = welcome_banner(s, Path("/tmp"))
-    out = _render(table)
-    # icon contains terminal-ish text
-    assert "python" in out or "import" in out
-    assert "ready" in out
+    panel = welcome_banner(s, Path("/home/user/work"))
+    out = _render(panel)
+    assert "home" in out and "user" in out and "work" in out
 
 
 def test_welcome_banner_without_version():
     from pycode_agent.config.settings import Settings
     s = Settings()
-    table = welcome_banner(s, Path("/tmp"))
-    out = _render(table)
+    panel = welcome_banner(s, Path("/tmp"))
+    out = _render(panel)
     assert "Py" in out
     assert "1." not in out  # no version snippet
