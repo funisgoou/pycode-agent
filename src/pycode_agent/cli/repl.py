@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -105,7 +106,7 @@ def run_repl(
 
     commands = ["/help", "/model", "/config", "/status", "/clear", "/undo",
                 "/tools", "/tokens", "/memory", "/diff", "/sessions", "/resume",
-                "/exit", "/quit"]
+                "/export", "/exit", "/quit"]
     def _status_fn():
         return status_text(agent, settings) if agent is not None else ""
     read_input, has_toolbar = _make_prompt_reader(project_dir, commands, status_fn=_status_fn)
@@ -152,7 +153,9 @@ def run_repl(
             console.print(status_line(agent, settings))
 
         # Normal agent interaction via streaming.
+        renderer = None
         try:
+            request_start = time.time()
             with console.status("[dim]Thinking...[/]", spinner="dots"):
                 stream_iter = agent.run_stream(user)
                 first_event = next(stream_iter)
@@ -160,15 +163,26 @@ def run_repl(
             def token_str() -> str:
                 cm = getattr(agent, "context_manager", None)
                 if cm is not None:
+                    from pycode_agent.cli.render import _format_tokens
                     est = cm.estimate_tokens(agent.messages)
-                    return f"📊 {est // 1000}k/{cm.budget // 1000}k tokens"
+                    return f"📊 {_format_tokens(est)}/{_format_tokens(cm.budget)} tokens"
                 return ""
 
-            StreamRenderer(console, token_count_fn=token_str,
-                           project_dir=str(project_dir)).consume(
+            renderer = StreamRenderer(console, token_count_fn=token_str,
+                                      project_dir=str(project_dir),
+                                      start_time=request_start,
+                                      show_tool_details=False)
+            renderer.consume(
                 itertools.chain([first_event], stream_iter)
             )
         except KeyboardInterrupt:
+            # Save any text that was generated before the interruption so the
+            # conversation history remains consistent.
+            partial = renderer.final_text if renderer is not None else ""
+            if partial:
+                from pycode_agent.core.messages import Message
+                agent.messages.append(Message(role="assistant", content=partial))
+                agent._persist()
             console.print("\n[dim][已中断][/]")
             continue
         except StopIteration:

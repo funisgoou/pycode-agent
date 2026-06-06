@@ -16,6 +16,8 @@ from pycode_agent.security.policy import Policy
 from pycode_agent.tools.base import ToolContext
 from pycode_agent.tools.file_tools import (
     EditFile,
+    GlobSearch,
+    GrepSearch,
     ListDir,
     ReadFile,
     SearchText,
@@ -31,7 +33,8 @@ from pycode_agent.utils.diff import PatchManager
 
 def _build_registry(settings: Settings) -> ToolRegistry:
     reg = ToolRegistry()
-    for tool in (ReadFile(), ListDir(), SearchText(), WriteFile(), EditFile(), StrReplace(),
+    for tool in (ReadFile(), ListDir(), SearchText(), GrepSearch(), GlobSearch(),
+                 WriteFile(), EditFile(), StrReplace(),
                  GitStatus(), GitDiff(), MemoryRead(), MemoryWrite()):
         reg.register(tool)
     if settings.security.allow_shell:

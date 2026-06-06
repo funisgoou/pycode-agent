@@ -5,6 +5,7 @@ from io import StringIO
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.text import Text
 
 from pycode_agent.cli.render import (
     StreamRenderer,
@@ -200,12 +201,20 @@ def test_stream_renderer_interleaved_text_tool_text():
 
 
 class _FakeLive:
-    """Records constructor kwargs; no-op start/stop/update."""
+    """Records constructor kwargs; no-op start/stop/update.
+
+    Compatible with both the old ``Live(display)`` and the new
+    ``_DynamicLive(renderable_fn)`` constructors.
+    """
     instances = []
 
-    def __init__(self, renderable=None, **kwargs):
-        self.initial_renderable = renderable
-        self.renderable = renderable
+    def __init__(self, renderable_or_fn=None, **kwargs):
+        # _DynamicLive passes a callable; Live passes a renderable.
+        if callable(renderable_or_fn) and not isinstance(renderable_or_fn, (str, Text)):
+            self.initial_renderable = renderable_or_fn()
+        else:
+            self.initial_renderable = renderable_or_fn
+        self.renderable = self.initial_renderable
         self.kwargs = kwargs
         _FakeLive.instances.append(self)
 
@@ -225,7 +234,7 @@ def test_stream_renderer_live_is_transient(monkeypatch):
     import pycode_agent.cli.render as render_mod
 
     _FakeLive.instances = []
-    monkeypatch.setattr(render_mod, "Live", _FakeLive)
+    monkeypatch.setattr(render_mod, "_DynamicLive", _FakeLive)
 
     buf = StringIO()
     console = Console(file=buf, force_terminal=True, no_color=True, width=80)
@@ -244,7 +253,7 @@ def test_stream_renderer_shows_thinking_after_tool_result(monkeypatch):
     import pycode_agent.cli.render as render_mod
 
     _FakeLive.instances = []
-    monkeypatch.setattr(render_mod, "Live", _FakeLive)
+    monkeypatch.setattr(render_mod, "_DynamicLive", _FakeLive)
 
     buf = StringIO()
     console = Console(file=buf, force_terminal=True, no_color=True, width=80)

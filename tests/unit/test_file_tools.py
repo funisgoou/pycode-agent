@@ -7,7 +7,6 @@ from pycode_agent.utils.diff import PatchManager
 
 def _ctx(tmp_path) -> ToolContext:
     return ToolContext(project_dir=tmp_path, patch_manager=PatchManager())
-
 def test_read_file(tmp_path):
     (tmp_path / "a.py").write_text("print('x')\n", encoding="utf-8")
     res = ReadFile().run(ReadFile.args_model(path="a.py"), _ctx(tmp_path))
@@ -136,3 +135,100 @@ def test_write_file_without_patch_manager(tmp_path):
     res = WriteFile().run(WriteFile.args_model(path="n.txt", content="x\n"), ctx)
     assert res.ok
     assert (tmp_path / "n.txt").read_text(encoding="utf-8") == "x\n"
+
+
+# ── ReadFile line range ───────────────────────────────────────────
+
+def test_read_file_line_range(tmp_path):
+    (tmp_path / "a.py").write_text("line1\nline2\nline3\nline4\nline5\n", encoding="utf-8")
+    res = ReadFile().run(ReadFile.args_model(path="a.py", start_line=2, end_line=4), _ctx(tmp_path))
+    assert res.ok
+    assert "line2" in res.content
+    assert "line4" in res.content
+    assert "line1\n" not in res.content.split("\n", 1)[1]  # header stripped conceptually
+    assert "[lines 2-4 of 5]" in res.content
+
+
+def test_read_file_start_only(tmp_path):
+    (tmp_path / "a.py").write_text("a\nb\nc\nd\n", encoding="utf-8")
+    res = ReadFile().run(ReadFile.args_model(path="a.py", start_line=3), _ctx(tmp_path))
+    assert res.ok
+    assert "c" in res.content and "d" in res.content
+
+
+# ── GrepSearch ────────────────────────────────────────────────────
+
+def test_grep_search_fallback(tmp_path, monkeypatch):
+    """GrepSearch Python fallback when rg is unavailable."""
+    import pycode_agent.tools.file_tools as ft
+    from pycode_agent.utils.proc import ProcResult
+    monkeypatch.setattr(
+        ft, "run_command",
+        lambda *a, **k: ProcResult(ok=False, returncode=-1, stdout="", stderr="", error="not found"),
+    )
+    (tmp_path / "a.py").write_text("def foo():\n    pass\ndef bar():\n    pass\n", encoding="utf-8")
+    from pycode_agent.tools.file_tools import GrepSearch
+    res = GrepSearch().run(GrepSearch.args_model(pattern=r"def \w+"), _ctx(tmp_path))
+    assert res.ok
+    assert "foo" in res.content and "bar" in res.content
+
+
+def test_grep_search_invalid_regex(tmp_path, monkeypatch):
+    import pycode_agent.tools.file_tools as ft
+    from pycode_agent.utils.proc import ProcResult
+    monkeypatch.setattr(
+        ft, "run_command",
+        lambda *a, **k: ProcResult(ok=False, returncode=-1, stdout="", stderr="", error="not found"),
+    )
+    from pycode_agent.tools.file_tools import GrepSearch
+    res = GrepSearch().run(GrepSearch.args_model(pattern="[invalid"), _ctx(tmp_path))
+    assert not res.ok and "invalid regex" in res.error
+
+
+def test_grep_search_case_insensitive(tmp_path, monkeypatch):
+    import pycode_agent.tools.file_tools as ft
+    from pycode_agent.utils.proc import ProcResult
+    monkeypatch.setattr(
+        ft, "run_command",
+        lambda *a, **k: ProcResult(ok=False, returncode=-1, stdout="", stderr="", error="not found"),
+    )
+    (tmp_path / "a.py").write_text("Hello World\n", encoding="utf-8")
+    from pycode_agent.tools.file_tools import GrepSearch
+    res = GrepSearch().run(
+        GrepSearch.args_model(pattern="hello", case_sensitive=False), _ctx(tmp_path)
+    )
+    assert res.ok and "Hello" in res.content
+
+
+# ── GlobSearch ────────────────────────────────────────────────────
+
+def test_glob_search(tmp_path):
+    (tmp_path / "a.py").write_text("", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("", encoding="utf-8")
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "c.py").write_text("", encoding="utf-8")
+    from pycode_agent.tools.file_tools import GlobSearch
+    res = GlobSearch().run(GlobSearch.args_model(pattern="*.py"), _ctx(tmp_path))
+    assert res.ok and "a.py" in res.content
+
+
+def test_glob_search_recursive(tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "c.py").write_text("", encoding="utf-8")
+    from pycode_agent.tools.file_tools import GlobSearch
+    res = GlobSearch().run(GlobSearch.args_model(pattern="**/*.py"), _ctx(tmp_path))
+    assert res.ok and "c.py" in res.content
+
+
+def test_glob_search_no_matches(tmp_path):
+    from pycode_agent.tools.file_tools import GlobSearch
+    res = GlobSearch().run(GlobSearch.args_model(pattern="*.xyz"), _ctx(tmp_path))
+    assert res.ok and "no matches" in res.content
+
+
+def test_glob_search_skips_sensitive(tmp_path):
+    (tmp_path / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    from pycode_agent.tools.file_tools import GlobSearch
+    res = GlobSearch().run(GlobSearch.args_model(pattern="*.env"), _ctx(tmp_path))
+    # .env is sensitive — should not appear in results
+    assert ".env" not in res.content or "no matches" in res.content

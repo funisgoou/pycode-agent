@@ -33,6 +33,15 @@ _BLACKLIST = [
     # Reverse / bind shells via netcat.
     r"\bnc\b.*-e\b",
     r"\bncat\b.*-e\b",
+    # ── Windows-specific dangerous commands ──
+    r"\bformat\s+[a-zA-Z]:",                  # format C:
+    r"\bdiskpart\b",                           # disk partitioning tool
+    r"\breg\s+(delete|add)\b",                # registry modification
+    r"\brd\s+/[a-zA-Z]*s[a-zA-Z]*\s+[a-zA-Z]:\\\s*$",  # rd /s /q C:\
+    r"\bdel\s+/[a-zA-Z]*s[a-zA-Z]*\s+[a-zA-Z]:\\",    # del /s C:\
+    r"\bnetsh\s+advfirewall\s+reset\b",       # reset firewall
+    r"\bbcdedit\b",                            # boot config editor
+    r"\bshutdown\s+-[srf]",                   # shutdown/restart
 ]
 _BL = [re.compile(p, re.IGNORECASE) for p in _BLACKLIST]
 

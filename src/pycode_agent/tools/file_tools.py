@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -14,6 +15,7 @@ from .base import Risk, Tool, ToolContext
 logger = logging.getLogger(__name__)
 
 MAX_READ_BYTES = 200_000
+MAX_LINES = 2000
 
 
 class PathOutsideProjectError(Exception):
@@ -45,11 +47,13 @@ def _preview_write(ctx: ToolContext, path: str, content: str) -> str:
 
 class ReadArgs(BaseModel):
     path: str = Field(description="项目内相对路径")
+    start_line: int | None = Field(default=None, description="起始行号(1-based, 包含)")
+    end_line: int | None = Field(default=None, description="结束行号(1-based, 包含)")
 
 
 class ReadFile(Tool[ReadArgs]):
     name = "read_file"
-    description = "读取文本文件内容(相对项目根目录)"
+    description = "读取文本文件内容(相对项目根目录, 可选行号范围)"
     args_model = ReadArgs
     risk = Risk.LOW
 
@@ -59,8 +63,19 @@ class ReadFile(Tool[ReadArgs]):
         p = _resolve(ctx, args.path)
         if not p.is_file():
             return ToolResult(ok=False, error=f"not a file: {args.path}")
-        data = p.read_text(encoding="utf-8", errors="replace")[:MAX_READ_BYTES]
-        return ToolResult(ok=True, content=data)
+        text = p.read_text(encoding="utf-8", errors="replace")
+        # Optional line-range slicing (1-based, inclusive on both ends).
+        if args.start_line is not None or args.end_line is not None:
+            lines = text.splitlines(keepends=True)
+            start = max((args.start_line or 1) - 1, 0)
+            end = args.end_line if args.end_line is not None else len(lines)
+            selected = lines[start:end]
+            total = len(lines)
+            header = f"[lines {start + 1}-{start + len(selected)} of {total}]\n"
+            text = header + "".join(selected)
+        else:
+            text = text[:MAX_READ_BYTES]
+        return ToolResult(ok=True, content=text)
 
 
 class ListArgs(BaseModel):
@@ -205,3 +220,82 @@ class StrReplace(Tool[StrReplaceArgs]):
         if new_content is None:
             return error or ""
         return _preview_write(ctx, args.path, new_content)
+
+
+# ---------------------------------------------------------------------------
+# grep_search — regex-aware text search (rg preferred, Python fallback)
+# ---------------------------------------------------------------------------
+
+class GrepArgs(BaseModel):
+    pattern: str = Field(description="正则表达式搜索模式")
+    path: str = "."
+    case_sensitive: bool = Field(default=True, description="是否区分大小写")
+
+
+class GrepSearch(Tool[GrepArgs]):
+    name = "grep_search"
+    description = "在项目中用正则表达式搜索文本(优先 ripgrep, 回退 Python)"
+    args_model = GrepArgs
+    risk = Risk.LOW
+
+    def run(self, args: GrepArgs, ctx: ToolContext) -> ToolResult:
+        base = _resolve(ctx, args.path)
+        # Try ripgrep first — it is much faster than pure Python.
+        flags = [] if args.case_sensitive else ["-i"]
+        out = run_command(
+            ["rg", "-n", "--no-heading", *flags, args.pattern, str(base)],
+            timeout=30,
+        )
+        if out.error is None and out.returncode in (0, 1):
+            return ToolResult(ok=True, content=out.stdout[:MAX_READ_BYTES] or "(no matches)")
+        # Python fallback: compile the regex and walk the tree.
+        try:
+            rx = re.compile(args.pattern, 0 if args.case_sensitive else re.IGNORECASE)
+        except re.error as e:
+            return ToolResult(ok=False, error=f"invalid regex: {e}")
+        hits: list[str] = []
+        for f in base.rglob("*"):
+            if not f.is_file() or is_sensitive(str(f)):
+                continue
+            try:
+                for i, line in enumerate(
+                    f.read_text(encoding="utf-8", errors="ignore").splitlines(), 1
+                ):
+                    if rx.search(line):
+                        hits.append(f"{f.relative_to(ctx.project_dir)}:{i}:{line}")
+                        if len(hits) >= 500:
+                            break
+            except OSError:
+                continue
+            if len(hits) >= 500:
+                break
+        return ToolResult(ok=True, content="\n".join(hits) or "(no matches)")
+
+
+# ---------------------------------------------------------------------------
+# glob_search — find files by filename pattern
+# ---------------------------------------------------------------------------
+
+class GlobArgs(BaseModel):
+    pattern: str = Field(description="文件名 glob 模式, 如 '*.py' 或 '**/*.ts'")
+    path: str = "."
+
+
+class GlobSearch(Tool[GlobArgs]):
+    name = "glob_search"
+    description = "按文件名 glob 模式查找文件(如 *.py, **/*.ts)"
+    args_model = GlobArgs
+    risk = Risk.LOW
+
+    def run(self, args: GlobArgs, ctx: ToolContext) -> ToolResult:
+        base = _resolve(ctx, args.path)
+        matches: list[str] = []
+        for p in base.glob(args.pattern):
+            if p.is_file() and not is_sensitive(str(p)):
+                matches.append(str(p.relative_to(ctx.project_dir)))
+                if len(matches) >= 200:
+                    break
+        if not matches:
+            return ToolResult(ok=True, content="(no matches)")
+        matches.sort()
+        return ToolResult(ok=True, content="\n".join(matches))

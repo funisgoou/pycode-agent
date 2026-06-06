@@ -49,11 +49,23 @@ class OpenAICompatibleProvider(LLMProvider):
         self.api_key = api_key
         self.timeout = timeout
         self._client = client or httpx.Client(base_url=base_url, timeout=timeout)
+        self._owns_client = client is None  # only close clients we created
         self.max_retries = max_retries
         self.backoff_base = backoff_base
         self._sleep = sleep_fn
         self._stream = stream
         self._endpoint = self._resolve_endpoint()
+
+    def close(self) -> None:
+        """Release the underlying HTTP connection pool."""
+        if self._owns_client:
+            self._client.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def _resolve_endpoint(self) -> str:
         """Build the absolute chat-completions URL.
@@ -122,7 +134,14 @@ class OpenAICompatibleProvider(LLMProvider):
         return LLMResponse(text=msg.get("content"), tool_calls=tool_calls)
 
     def chat_stream(self, *, messages: list[Message], tools: list[dict]) -> Iterator:
-        """Streaming turn using SSE. Yields StreamEvent objects."""
+        """Streaming turn using SSE. Yields StreamEvent objects.
+
+        Retry safety: events are buffered internally.  If a retryable error
+        occurs before any event is yielded to the caller, the whole stream is
+        retried transparently.  Once at least one event has been yielded,
+        retryable errors propagate immediately — retrying would duplicate
+        events and corrupt the conversation state.
+        """
         if not self._stream:
             yield from super().chat_stream(messages=messages, tools=tools)
             return
@@ -139,9 +158,18 @@ class OpenAICompatibleProvider(LLMProvider):
         attempt = 0
         while True:
             try:
-                yield from self._stream_once(payload, headers)
+                buffered: list = []
+                emitted = False
+                for event in self._stream_once(payload, headers):
+                    buffered.append(event)
+                    emitted = True
+                # All events collected without error — yield them all.
+                yield from buffered
                 return
             except self._RETRYABLE:
+                if emitted:
+                    # Already yielded partial events — cannot retry safely.
+                    raise
                 if attempt >= self.max_retries:
                     raise
                 self._sleep(self.backoff_base * (2 ** attempt))
@@ -221,7 +249,7 @@ class OpenAICompatibleProvider(LLMProvider):
                             completion_tokens=usage.get("completion_tokens", 0),
                             total_tokens=usage.get("total_tokens", 0),
                         )
-                except Exception:
+                except (KeyError, TypeError):
                     pass
 
                 if not has_tool_calls:

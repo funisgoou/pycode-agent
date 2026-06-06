@@ -20,6 +20,13 @@ _SENSITIVE_PATTERNS = [
     r"(^|[/_.-])secrets?([/_.-]|$)",
     r"(^|[/_.-])credentials?([/_.-]|$)",
     r"\.aws/credentials$",
+    # ── Windows-specific sensitive paths ──
+    r"(?i)appdata[/\\]roaming[/\\].*[/\\](credentials|secrets|tokens)",
+    r"(?i)[/\\]\.ssh[/\\]",
+    r"(?i)[/\\]\.gnupg[/\\]",
+    r"(?i)[/\\]ntuser\.dat$",
+    r"(?i)[/\\]sam$",
+    r"(?i)[/\\]system32[/\\]config[/\\]",
 ]
 _COMPILED = [re.compile(p, re.IGNORECASE) for p in _SENSITIVE_PATTERNS]
 

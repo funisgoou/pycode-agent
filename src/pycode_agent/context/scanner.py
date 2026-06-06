@@ -11,6 +11,13 @@ IGNORED_DIRS = {
 _LANG_BY_EXT = {
     ".py": "python", ".js": "javascript", ".ts": "typescript",
     ".go": "go", ".rs": "rust", ".java": "java", ".rb": "ruby",
+    ".c": "c", ".h": "c", ".cpp": "cpp", ".cxx": "cpp", ".hpp": "cpp",
+    ".cs": "csharp", ".php": "php", ".swift": "swift", ".kt": "kotlin",
+    ".kts": "kotlin", ".scala": "scala", ".r": "r", ".R": "r",
+    ".dart": "dart", ".lua": "lua", ".sh": "shell", ".bash": "shell",
+    ".zsh": "shell", ".ps1": "powershell", ".html": "html", ".css": "css",
+    ".sql": "sql", ".md": "markdown", ".yaml": "yaml", ".yml": "yaml",
+    ".toml": "toml", ".json": "json", ".xml": "xml",
 }
 MAX_TREE_ENTRIES = 300
 

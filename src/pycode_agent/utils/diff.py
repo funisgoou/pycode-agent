@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import difflib
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class ConflictError(Exception):
@@ -43,8 +46,18 @@ class PatchManager:
         self._history.append(token)
         return token
 
-    def rollback(self, token: RollbackToken) -> None:
+    def rollback(self, token: RollbackToken, expected_current: str | None = None) -> None:
         if token.existed_before:
+            # Guard against overwriting content that changed externally since
+            # the patch was applied.
+            if expected_current is not None and token.path.is_file():
+                actual = token.path.read_text(encoding="utf-8")
+                if actual != expected_current:
+                    logger.warning(
+                        "rollback: file %s was modified externally; "
+                        "rolling back anyway (user-requested undo).",
+                        token.path,
+                    )
             token.path.write_text(token.old_content or "", encoding="utf-8")
         else:
             if token.path.exists():

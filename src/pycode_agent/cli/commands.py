@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import difflib
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from rich.console import Console
 
+from pycode_agent.core.messages import Message
 from pycode_agent.utils.proc import run_command
 
 if TYPE_CHECKING:
@@ -77,14 +79,16 @@ class SlashCommandRegistry:
 # Built-in command handlers
 # ---------------------------------------------------------------------------
 
-def _cmd_help(ctx: SlashContext) -> None:
-    """显示可用命令列表"""
-    ctx.console.print("[bold]可用命令:[/]")
-    # Access the registry that dispatched to us (stored on the context is not
-    # available directly, so we accept it via closure in build_builtin_registry).
-    # We use a small trick: attach the registry to the handler at registration.
-    registry = _cmd_help._registry  # type: ignore[attr-defined]
-    ctx.console.print(registry.help_text())
+def _make_help_handler(registry: SlashCommandRegistry) -> Callable[[SlashContext], None]:
+    """Return a help handler that closes over *registry* instead of using a
+    function-attribute hack."""
+
+    def _cmd_help(ctx: SlashContext) -> None:
+        """显示可用命令列表"""
+        ctx.console.print("[bold]可用命令:[/]")
+        ctx.console.print(registry.help_text())
+
+    return _cmd_help
 
 
 def _cmd_model(ctx: SlashContext) -> None:
@@ -137,7 +141,7 @@ def _cmd_clear(ctx: SlashContext) -> None:
     from pycode_agent.core.agent import SYSTEM_PROMPT
     prefix = ctx.agent.system_prefix
     ctx.agent.messages = [
-        __import__("pycode_agent.core.messages", fromlist=["Message"]).Message(
+        Message(
             role="system",
             content=SYSTEM_PROMPT + ("\n\n" + prefix if prefix else ""),
         )
@@ -206,6 +210,20 @@ def _cmd_diff(ctx: SlashContext) -> None:
         ctx.console.print(diff_to_renderable(rendered))
 
 
+def _cmd_export(ctx: SlashContext) -> None:
+    """导出当前对话为 JSON 文件: /export [path]"""
+    target = ctx.args.strip() or str(ctx.project_dir / "conversation.json")
+    messages = ctx.agent.messages
+    data = [m.model_dump(exclude_none=True) for m in messages]
+    try:
+        Path(target).write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        ctx.console.print(f"[green]对话已导出到 {target}（{len(messages)} 条消息）[/]")
+    except OSError as e:
+        ctx.console.print(f"[red]导出失败:[/] {e}")
+
+
 def _cmd_sessions(ctx: SlashContext) -> None:
     """列出本项目的会话"""
     store = ctx.session_store
@@ -254,7 +272,7 @@ def build_builtin_registry() -> SlashCommandRegistry:
     registry = SlashCommandRegistry()
 
     commands = [
-        ("/help",   "显示可用命令列表",   _cmd_help),
+        ("/help",   "显示可用命令列表",   None),  # placeholder, set below
         ("/model",  "切换当前会话模型",   _cmd_model),
         ("/config", "查看配置",           _cmd_config),
         ("/status", "显示当前会话状态",   _cmd_status),
@@ -266,14 +284,13 @@ def build_builtin_registry() -> SlashCommandRegistry:
         ("/diff",   "显示最近一次修改 diff", _cmd_diff),
         ("/sessions", "列出本项目会话",   _cmd_sessions),
         ("/resume",   "切换到指定会话",   _cmd_resume),
+        ("/export",   "导出对话为 JSON",   _cmd_export),
         ("/exit",   "退出 REPL",          _cmd_exit),
         ("/quit",   "退出 REPL",          _cmd_exit),
     ]
 
+    help_handler = _make_help_handler(registry)
     for name, desc, handler in commands:
-        registry.register(name, desc, handler)
-
-    # Attach registry to help handler so it can print command list
-    _cmd_help._registry = registry  # type: ignore[attr-defined]
+        registry.register(name, desc, handler if handler is not None else help_handler)
 
     return registry

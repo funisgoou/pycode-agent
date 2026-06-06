@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from pycode_agent.core.messages import Message, ToolCall
@@ -32,6 +33,12 @@ SYSTEM_PROMPT = (
     "You can read, write, edit, and search files; run shell commands; check git "
     "status/diff; and read/write persistent memory. The user may also ask you "
     "conversational questions — answer them directly.\n"
+    "\n"
+    "Available search tools:\n"
+    "- search_text: plain-text search (fast, simple)\n"
+    "- grep_search: regex-aware search (supports patterns, case-insensitive flag)\n"
+    "- glob_search: find files by filename pattern (e.g. '*.py', '**/*.ts')\n"
+    "- read_file supports start_line/end_line for reading specific line ranges.\n"
     "\n"
     "## When to use tools\n"
     "ONLY call tools when the user explicitly asks you to interact with their "
@@ -80,6 +87,24 @@ class Agent:
         self.messages: list[Message] = [
             Message(role="system", content=SYSTEM_PROMPT)
         ]
+
+    @classmethod
+    def from_config(cls, config: AgentConfig) -> Agent:
+        """Alternative constructor that accepts an :class:`AgentConfig`."""
+        return cls(
+            provider=config.provider,
+            registry=config.registry,
+            policy=config.policy,
+            approval=config.approval,
+            audit=config.audit,
+            ctx=config.ctx,
+            max_turns=config.max_turns,
+            max_tool_calls=config.max_tool_calls,
+            system_prefix=config.system_prefix,
+            dry_run=config.dry_run,
+            context_manager=config.context_manager,
+            session_sink=config.session_sink,
+        )
 
     def _ensure_project_profile(self) -> None:
         """Lazily scan project and inject profile into the system message.
@@ -242,6 +267,7 @@ class Agent:
                     ok=result.ok,
                     content=result.content,
                     error=result.error,
+                    meta=result.meta,
                 )
                 self.messages.append(
                     Message(role="tool", tool_call_id=call.id, content=self._render(result))
@@ -249,3 +275,23 @@ class Agent:
             self._persist()
 
         yield TurnEnd(text="Stopped: reached max turns without a final answer.")
+
+
+@dataclass
+class AgentConfig:
+    """Consolidated configuration for :class:`Agent` construction.
+
+    Use ``Agent.from_config(config)`` or unpack with ``Agent(**asdict(config))``.
+    """
+    provider: LLMProvider
+    registry: ToolRegistry
+    policy: Policy
+    approval: Approval
+    audit: AuditLog
+    ctx: ToolContext
+    max_turns: int = 12
+    max_tool_calls: int = 40
+    system_prefix: str = ""
+    dry_run: bool = False
+    context_manager: ContextManager | None = None
+    session_sink: Callable[[list[Message]], None] | None = None
